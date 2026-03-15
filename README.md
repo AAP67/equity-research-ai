@@ -1,66 +1,69 @@
 # Equity Analyst Assistant
 
-AI-powered equity research tool that provides institutional-grade stock analysis in 3 minutes.
+**Institutional-grade equity research, powered by AI — delivered in under 3 minutes.**
 
-**Live Demo:** [Your Streamlit URL here]
+Enter a ticker, get a full research brief: financials, peer comps, price momentum, news sentiment, and an AI-generated investment summary.
+
+![Demo Screenshot](assets/demo-screenshot.png)
+
+**[Try the Live Demo →](https://equity-research-ai-francium77.streamlit.app/)**
+
+---
+
+## What It Does
+
+Traditional equity research takes analysts hours. This tool compresses the core workflow into a single interface: pull real-time financials, benchmark against peers, scan recent news for sentiment, and synthesize everything into a structured investment summary — all driven by Claude Sonnet 4.
+
+## Architecture
+
+```
+User Input (Ticker) → yfinance (financials + price data)
+                     → News API (recent headlines)
+                     → Peer comparison engine
+                     → Claude Sonnet 4 (synthesis + recommendation)
+                     → Streamlit UI (interactive report)
+```
+
+**Stack:** Streamlit · yfinance · News API · Claude Sonnet 4 (Anthropic) · Streamlit Cloud
 
 ## Features
-- 📊 Real-time financial metrics (P/E, margins, ROE, growth)
-- 🔄 Peer comparison with AI analysis
-- 📈 30-day price trends and momentum
-- 📰 News sentiment analysis
-- 🎯 AI-powered investment summary
 
-## Tech Stack
-- **Frontend:** Streamlit
-- **Data:** yfinance, News API
-- **AI:** Claude Sonnet 4 (Anthropic)
-- **Deployment:** Streamlit Cloud
+- Real-time financial metrics (P/E, margins, ROE, growth rates)
+- Peer comparison with AI-driven relative analysis
+- 30-day price trend and momentum indicators
+- News sentiment scoring from recent headlines
+- AI-generated investment summary with bull/bear thesis
 
-## Setup
+## Quickstart
 
-### 1. Clone the repository
 ```bash
 git clone https://github.com/AAP67/equity-research-ai.git
 cd equity-research-ai
-```
-
-### 2. Create virtual environment
-```bash
-python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Mac/Linux
-```
-
-### 3. Install dependencies
-```bash
+python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Set up API keys
-Create a `.env` file:
+Create a `.env` file with your API keys:
+
 ```
-ANTHROPIC_API_KEY=your_anthropic_key_here
-NEWS_API_KEY=your_news_api_key_here
+ANTHROPIC_API_KEY=your_key
+NEWS_API_KEY=your_key
 ```
 
-### 5. Run locally
+Then run:
+
 ```bash
 streamlit run app.py
 ```
 
-## Usage
-1. Enter stock ticker (e.g., NVDA)
-2. Optionally add peer tickers (e.g., AMD, INTC)
-3. Click "Analyze"
-4. Get comprehensive analysis in ~30 seconds
+Enter a ticker (e.g., `NVDA`), optionally add peers (`AMD, INTC`), and hit Analyze.
 
-## Project Documentation
+## Documentation
+
 See [PROJECT_PLAN.md](PROJECT_PLAN.md) for complete technical documentation and development decisions.
 
 ## Built By
-**Karan Rajpal**  
-Model Validation Expert @ Handshake AI  
-Former 5th Hire @ Borderless Capital | UC Berkeley Haas MBA '25
 
-Built in 16 hours as a portfolio project demonstrating product thinking and technical execution.
+**[Karan Rajpal](https://www.linkedin.com/in/karan-rajpal/)** — UC Berkeley Haas MBA '25 · LLM Validation @ Handshake AI (OpenAI/Perplexity) · Former 5th hire at Borderless Capital
+
+Built in 16 hours to demonstrate how AI can compress institutional-grade workflows into accessible tools.
