@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import datetime
 from data_fetchers import (
@@ -454,6 +455,23 @@ if analyze_btn and ticker_input:
             
             progress.empty()
             st.success("✅ Analysis complete!")
+            
+            # Signal to Francium parent
+            import json as _json
+            _signal_data = _json.dumps({
+                "type": "francium_signal",
+                "toolId": "equity-research",
+                "event": "analysis_complete",
+                "data": {
+                    "ticker": ticker_input,
+                    "peers": peers,
+                    "current_price": stock_data.get("current_price"),
+                    "price_change_30d": stock_data.get("price_change_pct_30d"),
+                    "pe_ratio": fund_data.get("pe_ratio") if isinstance(fund_data.get("pe_ratio"), (int, float)) else None,
+                    "profit_margin": fund_data.get("profit_margin"),
+                }
+            })
+            components.html(f"<script>window.top.postMessage({_signal_data}, '*');</script>", height=0)
             
             # Generate HTML report for download
             all_analyses_dict = {
