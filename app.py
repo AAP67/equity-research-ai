@@ -523,7 +523,19 @@ if analyze_btn and ticker_input:
                         if not text: return ''
                         text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
                         text = re.sub(r'#{1,3}\s*', '', text)
-                        text = text.replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+                        replacements = {
+                            '\u2014': '-', '\u2013': '-', '\u2012': '-',
+                            '\u2019': "'", '\u2018': "'",
+                            '\u201c': '"', '\u201d': '"',
+                            '\u2026': '...', '\u2022': '-',
+                            '\u2192': '->', '\u2190': '<-',
+                            '\u2265': '>=', '\u2264': '<=',
+                            '\u00d7': 'x', '\u2212': '-',
+                            '\u200b': '', '\u00a0': ' ',
+                        }
+                        for old, new in replacements.items():
+                            text = text.replace(old, new)
+                        text = text.encode('latin-1', errors='replace').decode('latin-1')
                         return text.strip()
                     
                     def add_section(pdf, title, content):
