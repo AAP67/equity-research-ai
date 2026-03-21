@@ -7,15 +7,19 @@ from data_fetchers import (
     get_fundamental_data,
     get_company_news,
     get_comprehensive_peer_data,
-    format_market_cap
+    format_market_cap,
+    get_revenue_segmentation,
+    get_earnings_transcript
 )
 from ai_analyzer import (
     analyze_financial_health,
     analyze_peer_comparison,
     analyze_price_trend,
     analyze_news_sentiment,
-    generate_investment_summary
+    generate_investment_summary,
+    run_business_deep_dive
 )
+from sec_parser import SECParser
 
 # ADD THIS NEW FUNCTION HERE:
 def generate_html_report(ticker, company_name, sector, analyses, stock_data, fund_data, peer_data):
@@ -424,7 +428,7 @@ if analyze_btn and ticker_input:
             # Fetch all data
             progress = st.empty()
             
-            progress.info("📊 Step 1/4: Fetching stock data and financials...")
+            progress.info("📊 Step 1/6: Fetching stock data and financials...")
             stock_data = get_stock_data(ticker_input)
             fund_data = get_fundamental_data(ticker_input)
             
@@ -432,15 +436,36 @@ if analyze_btn and ticker_input:
                 st.error(f"❌ Could not fetch data for {ticker_input}. Please check the ticker symbol.")
                 st.stop()
             
-            progress.info("📰 Step 2/4: Fetching news and peer data...")
+            progress.info("📰 Step 2/6: Fetching news and peer data...")
             news = get_company_news(ticker_input, ticker_input)
             peer_data = get_comprehensive_peer_data(ticker_input, peers) if peers else {}
             
-            progress.info("🧠 Step 3/4: AI analyzing financials and trends...")
+            progress.info("📜 Step 3/6: Downloading SEC filing and business data...")
+            # Phase 2 data: SEC filing, revenue segments, transcripts
+            sec_sections = {}
+            try:
+                parser = SECParser()
+                filing_info = parser.get_latest_10k(ticker_input)
+                if "error" not in filing_info:
+                    sec_sections = parser.extract_all_sections(filing_info['file_path'])
+                else:
+                    print(f"SEC filing not available: {filing_info['error']}")
+            except Exception as e:
+                print(f"SEC parser error: {e}")
+            
+            segmentation_data = get_revenue_segmentation(ticker_input)
+            transcript_data = get_earnings_transcript(ticker_input)
+            
+            progress.info("🔬 Step 4/6: AI deep dive — business model, moat, management signals...")
+            deep_dive_result = run_business_deep_dive(
+                ticker_input, sec_sections, segmentation_data, transcript_data
+            )
+            
+            progress.info("🧠 Step 5/6: AI analyzing financials and trends...")
             health_analysis = analyze_financial_health(ticker_input, fund_data)
             trend_analysis = analyze_price_trend(ticker_input, stock_data)
             
-            progress.info("🧠 Step 4/4: AI analyzing peers and news...")
+            progress.info("🧠 Step 6/6: AI analyzing peers and news...")
             peer_analysis = analyze_peer_comparison(ticker_input, peer_data) if peer_data else "No peer data provided."
             news_analysis = analyze_news_sentiment(ticker_input, news)
             
@@ -578,6 +603,89 @@ if analyze_btn and ticker_input:
             st.markdown('<div class="summary-title">🎯 Investment Summary</div>', unsafe_allow_html=True)
             st.markdown(investment_summary)
             st.markdown('</div>', unsafe_allow_html=True)
+            
+            # ============================================================
+            # PHASE 2: Business Model Deep Dive
+            # ============================================================
+            st.markdown('<div class="section-header">🏢 Business Model Deep Dive</div>', unsafe_allow_html=True)
+            
+            # Data source status indicator
+            if deep_dive_result and deep_dive_result.get('data_sources'):
+                sources = deep_dive_result['data_sources']
+                status_parts = []
+                for source, available in sources.items():
+                    status_parts.append(f"{'✅' if available else '❌'} {source}")
+                st.caption("Data sources: " + " · ".join(status_parts))
+            
+            # Show the synthesis (guard against error strings and None)
+            synthesis = deep_dive_result.get('synthesis') if deep_dive_result else None
+            if synthesis and not synthesis.startswith('Error'):
+                st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
+                st.markdown('<div class="analysis-title">🤖 AI Business Analysis (sourced from 10-K, earnings calls, revenue data)</div>', unsafe_allow_html=True)
+                st.markdown(synthesis)
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("Business deep dive data not available for this ticker. Ensure SEC_EMAIL and FMP_API_KEY are configured.")
+            
+            # Revenue segmentation charts (if available)
+            if segmentation_data:
+                seg_col1, seg_col2 = st.columns(2)
+                
+                with seg_col1:
+                    if segmentation_data.get('by_product'):
+                        st.markdown("**Revenue by Segment**")
+                        prod_df = pd.DataFrame(segmentation_data['by_product'])
+                        prod_df['revenue_display'] = prod_df['revenue'].apply(
+                            lambda x: f"${x/1e9:.2f}B" if x >= 1e9 else f"${x/1e6:.0f}M"
+                        )
+                        display_df = prod_df[['segment', 'revenue_display', 'percentage']].rename(
+                            columns={'segment': 'Segment', 'revenue_display': 'Revenue', 'percentage': '% of Total'}
+                        )
+                        st.dataframe(display_df, hide_index=True, use_container_width=True)
+                
+                with seg_col2:
+                    if segmentation_data.get('by_geography'):
+                        st.markdown("**Revenue by Geography**")
+                        geo_df = pd.DataFrame(segmentation_data['by_geography'])
+                        geo_df['revenue_display'] = geo_df['revenue'].apply(
+                            lambda x: f"${x/1e9:.2f}B" if x >= 1e9 else f"${x/1e6:.0f}M"
+                        )
+                        display_df = geo_df[['segment', 'revenue_display', 'percentage']].rename(
+                            columns={'segment': 'Region', 'revenue_display': 'Revenue', 'percentage': '% of Total'}
+                        )
+                        st.dataframe(display_df, hide_index=True, use_container_width=True)
+            
+            # Expandable: show Stage 1 details for transparency
+            if deep_dive_result and deep_dive_result.get('stage1'):
+                with st.expander("📋 View Detailed Source Analyses"):
+                    stage1 = deep_dive_result['stage1']
+                    has_any = False
+                    
+                    if stage1.get('business_model') and not stage1['business_model'].startswith(("10-K", "Error")):
+                        st.markdown("**Business Model (from 10-K)**")
+                        st.markdown(stage1['business_model'])
+                        st.divider()
+                        has_any = True
+                    
+                    if stage1.get('revenue_quality') and not stage1['revenue_quality'].startswith(("Revenue seg", "Error")):
+                        st.markdown("**Revenue Quality Assessment**")
+                        st.markdown(stage1['revenue_quality'])
+                        st.divider()
+                        has_any = True
+                    
+                    if stage1.get('management_signals') and not stage1['management_signals'].startswith(("Earnings call", "Error")):
+                        st.markdown("**Management Signals (from Earnings Calls)**")
+                        st.markdown(stage1['management_signals'])
+                        st.divider()
+                        has_any = True
+                    
+                    if stage1.get('moat_signals') and not stage1['moat_signals'].startswith(("10-K Risk", "Error")):
+                        st.markdown("**Competitive Moat Analysis**")
+                        st.markdown(stage1['moat_signals'])
+                        has_any = True
+                    
+                    if not has_any:
+                        st.info("No detailed source analyses available — data sources may be unreachable.")
             
             # Key Metrics Row
             st.markdown('<div class="section-header">💰 Key Metrics</div>', unsafe_allow_html=True)

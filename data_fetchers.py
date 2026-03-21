@@ -6,9 +6,9 @@ from datetime import datetime, timedelta
 
 load_dotenv()
 
-# API Keys
-FMP_API_KEY = os.getenv('FMP_API_KEY', 'nxio4zeKtGuItR5eXrw2pcGmqgQs3VlH')
-ALPHA_VANTAGE_KEY = os.getenv('ALPHA_VANTAGE_KEY', '8I0IMPIUNWV89JF9')
+# API Keys — must be set in .env or Streamlit secrets, never hardcoded
+FMP_API_KEY = os.getenv('FMP_API_KEY')
+ALPHA_VANTAGE_KEY = os.getenv('ALPHA_VANTAGE_KEY')
 
 
 # ============================================================
@@ -17,9 +17,11 @@ ALPHA_VANTAGE_KEY = os.getenv('ALPHA_VANTAGE_KEY', '8I0IMPIUNWV89JF9')
 
 def get_stock_data_fmp(ticker):
     """Get stock price data from Financial Modeling Prep"""
+    if not FMP_API_KEY:
+        return None
     try:
         # Get current quote
-        quote_url = f"https://financialmodelingprep.com/api/v3/quote/{ticker}?apikey={FMP_API_KEY}"
+        quote_url = f"https://financialmodelingprep.com/stable/quote?symbol={ticker}&apikey={FMP_API_KEY}"
         quote_resp = requests.get(quote_url, timeout=10)
         quote_data = quote_resp.json()
         
@@ -31,7 +33,7 @@ def get_stock_data_fmp(ticker):
         # Get historical prices (30 days)
         to_date = datetime.now().strftime('%Y-%m-%d')
         from_date = (datetime.now() - timedelta(days=45)).strftime('%Y-%m-%d')
-        hist_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{ticker}?from={from_date}&to={to_date}&apikey={FMP_API_KEY}"
+        hist_url = f"https://financialmodelingprep.com/stable/historical-price-eod/full?symbol={ticker}&from={from_date}&to={to_date}&apikey={FMP_API_KEY}"
         hist_resp = requests.get(hist_url, timeout=10)
         hist_data = hist_resp.json()
         
@@ -71,6 +73,8 @@ def get_stock_data_fmp(ticker):
 
 def get_stock_data_alpha_vantage(ticker):
     """Get stock price data from Alpha Vantage"""
+    if not ALPHA_VANTAGE_KEY:
+        return None
     try:
         url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol={ticker}&outputsize=compact&apikey={ALPHA_VANTAGE_KEY}"
         resp = requests.get(url, timeout=10)
@@ -165,9 +169,11 @@ def get_stock_data(ticker):
 
 def get_fundamental_data_fmp(ticker):
     """Get fundamental data from FMP"""
+    if not FMP_API_KEY:
+        return None
     try:
         # Company profile
-        profile_url = f"https://financialmodelingprep.com/api/v3/profile/{ticker}?apikey={FMP_API_KEY}"
+        profile_url = f"https://financialmodelingprep.com/stable/profile?symbol={ticker}&apikey={FMP_API_KEY}"
         profile_resp = requests.get(profile_url, timeout=10)
         profile_data = profile_resp.json()
         
@@ -177,14 +183,14 @@ def get_fundamental_data_fmp(ticker):
         profile = profile_data[0]
         
         # Key metrics
-        ratios_url = f"https://financialmodelingprep.com/api/v3/ratios-ttm/{ticker}?apikey={FMP_API_KEY}"
+        ratios_url = f"https://financialmodelingprep.com/stable/ratios-ttm?symbol={ticker}&apikey={FMP_API_KEY}"
         ratios_resp = requests.get(ratios_url, timeout=10)
         ratios_data = ratios_resp.json()
         
         ratios = ratios_data[0] if ratios_data and isinstance(ratios_data, list) else {}
         
         # Growth
-        growth_url = f"https://financialmodelingprep.com/api/v3/financial-growth/{ticker}?limit=1&apikey={FMP_API_KEY}"
+        growth_url = f"https://financialmodelingprep.com/stable/financial-growth?symbol={ticker}&limit=1&apikey={FMP_API_KEY}"
         growth_resp = requests.get(growth_url, timeout=10)
         growth_data = growth_resp.json()
         growth = growth_data[0] if growth_data and isinstance(growth_data, list) else {}
@@ -334,6 +340,136 @@ def get_company_news(ticker, company_name=None):
     except Exception as e:
         print(f"Error fetching news: {str(e)}")
         return []
+
+
+# ============================================================
+# REVENUE SEGMENTATION - FMP
+# ============================================================
+
+def get_revenue_segmentation(ticker):
+    """
+    Fetch revenue breakdown by product line and geography.
+    Returns: dict with 'by_product' and 'by_geography' keys,
+    each containing a list of {segment, revenue, percentage} dicts.
+    """
+    if not FMP_API_KEY:
+        return None
+    result = {'by_product': [], 'by_geography': []}
+    
+    # Product segmentation
+    try:
+        url = f"https://financialmodelingprep.com/stable/revenue-product-segmentation?symbol={ticker}&structure=flat&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        
+        if data and isinstance(data, list) and len(data) > 0:
+            # Get most recent period
+            latest = data[0]
+            # latest is a dict like {"2024-01-28": {"Gaming": 123, "Datacenter": 456, ...}}
+            if isinstance(latest, dict):
+                for period, segments in latest.items():
+                    if isinstance(segments, dict):
+                        total = sum(v for v in segments.values() if isinstance(v, (int, float)))
+                        for segment, revenue in segments.items():
+                            if isinstance(revenue, (int, float)) and total > 0:
+                                result['by_product'].append({
+                                    'segment': segment,
+                                    'revenue': revenue,
+                                    'percentage': round((revenue / total) * 100, 1)
+                                })
+                        # Sort by revenue descending
+                        result['by_product'].sort(key=lambda x: x['revenue'], reverse=True)
+                        break  # Only need most recent period
+            
+            print(f"[FMP] Product segmentation fetched for {ticker}: {len(result['by_product'])} segments")
+    except Exception as e:
+        print(f"[FMP] Error fetching product segmentation for {ticker}: {e}")
+    
+    # Geographic segmentation
+    try:
+        url = f"https://financialmodelingprep.com/stable/revenue-geographic-segmentation?symbol={ticker}&structure=flat&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        
+        if data and isinstance(data, list) and len(data) > 0:
+            latest = data[0]
+            if isinstance(latest, dict):
+                for period, segments in latest.items():
+                    if isinstance(segments, dict):
+                        total = sum(v for v in segments.values() if isinstance(v, (int, float)))
+                        for segment, revenue in segments.items():
+                            if isinstance(revenue, (int, float)) and total > 0:
+                                result['by_geography'].append({
+                                    'segment': segment,
+                                    'revenue': revenue,
+                                    'percentage': round((revenue / total) * 100, 1)
+                                })
+                        result['by_geography'].sort(key=lambda x: x['revenue'], reverse=True)
+                        break
+            
+            print(f"[FMP] Geographic segmentation fetched for {ticker}: {len(result['by_geography'])} regions")
+    except Exception as e:
+        print(f"[FMP] Error fetching geographic segmentation for {ticker}: {e}")
+    
+    return result if (result['by_product'] or result['by_geography']) else None
+
+
+# ============================================================
+# EARNINGS CALL TRANSCRIPTS - FMP
+# ============================================================
+
+def get_earnings_transcript(ticker, num_quarters=2):
+    """
+    Fetch recent earnings call transcripts.
+    Returns: list of dicts with 'quarter', 'year', 'content' keys.
+    """
+    if not FMP_API_KEY:
+        return None
+    transcripts = []
+    
+    try:
+        # First get available transcript dates
+        dates_url = f"https://financialmodelingprep.com/stable/earning-call-transcript?symbol={ticker}&apikey={FMP_API_KEY}"
+        dates_resp = requests.get(dates_url, timeout=10)
+        dates_data = dates_resp.json()
+        
+        if not dates_data or not isinstance(dates_data, list):
+            print(f"[FMP] No transcript dates found for {ticker}")
+            return None
+        
+        # Get the most recent quarters
+        recent = dates_data[:num_quarters]
+        
+        for entry in recent:
+            quarter = entry.get('quarter', 0)
+            year = entry.get('year', 0)
+            
+            if not quarter or not year:
+                continue
+            
+            # Fetch the actual transcript
+            transcript_url = f"https://financialmodelingprep.com/stable/earning-call-transcript?symbol={ticker}&quarter={quarter}&year={year}&apikey={FMP_API_KEY}"
+            transcript_resp = requests.get(transcript_url, timeout=15)
+            transcript_data = transcript_resp.json()
+            
+            if transcript_data and isinstance(transcript_data, list) and len(transcript_data) > 0:
+                content = transcript_data[0].get('content', '')
+                
+                if content:
+                    # Transcripts can be very long — cap at 15K chars per transcript
+                    transcripts.append({
+                        'quarter': f"Q{quarter}",
+                        'year': year,
+                        'content': content[:15000],
+                        'full_length': len(content)
+                    })
+                    print(f"[FMP] Transcript fetched for {ticker} Q{quarter} {year}: {len(content)} chars")
+        
+        return transcripts if transcripts else None
+        
+    except Exception as e:
+        print(f"[FMP] Error fetching transcripts for {ticker}: {e}")
+        return None
 
 
 # ============================================================

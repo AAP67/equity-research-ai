@@ -1,8 +1,9 @@
 import os
 import re
-from sec_edgar_downloader import Downloader
 from bs4 import BeautifulSoup
 from datetime import datetime
+from dotenv import load_dotenv
+load_dotenv()
 
 class SECParser:
     """
@@ -11,9 +12,26 @@ class SECParser:
     """
     
     def __init__(self, download_folder="sec_filings"):
-        """Initialize downloader"""
+        """Initialize downloader — defers SEC connection to first use"""
         self.download_folder = download_folder
-        self.dl = Downloader("YourCompanyName", "your.email@example.com", download_folder)
+        self.dl = None
+        self._company_name = os.getenv('SEC_COMPANY_NAME', 'Francium')
+        self._email = os.getenv('SEC_EMAIL')
+    
+    def _get_downloader(self):
+        """Lazy-init the downloader so it only hits SEC when actually needed"""
+        if self.dl is not None:
+            return self.dl
+        
+        if not self._email:
+            raise ValueError("SEC_EMAIL not set — required by SEC EDGAR for identification")
+        
+        try:
+            from sec_edgar_downloader import Downloader
+            self.dl = Downloader(self._company_name, self._email, self.download_folder)
+            return self.dl
+        except Exception as e:
+            raise ConnectionError(f"Could not connect to SEC EDGAR: {str(e)}")
     
     def get_latest_10k(self, ticker):
         """
@@ -22,7 +40,8 @@ class SECParser:
         """
         try:
             # Download latest 10-K
-            self.dl.get("10-K", ticker, limit=1)
+            dl = self._get_downloader()
+            dl.get("10-K", ticker, limit=1)
             
             # Find the downloaded file
             company_folder = os.path.join(self.download_folder, "sec-edgar-filings", ticker, "10-K")
@@ -100,6 +119,69 @@ class SECParser:
         except Exception as e:
             print(f"Error extracting document: {str(e)}")
             return None
+    
+    def extract_business_description(self, file_path):
+        """
+        Extract Item 1 - Business Description section
+        This is the core section explaining how the company makes money.
+        Returns: cleaned text of business description
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            soup = BeautifulSoup(content, 'lxml')
+            text = soup.get_text()
+            
+            # Match "Item 1" but NOT "Item 1A", "Item 1B", etc.
+            # Look for patterns like "Item 1.", "Item 1 ", "Item 1\n"
+            all_matches = []
+            for match in re.finditer(r'Item\s+1(?![0-9A-Za-z])', text, re.IGNORECASE):
+                all_matches.append(match.start())
+            
+            if len(all_matches) < 2:
+                return "Could not find Business Description section"
+            
+            # Use the SECOND occurrence (skip table of contents)
+            start_pos = all_matches[1]
+            
+            # Find where Item 1A starts (end of business description)
+            item_1a_match = re.search(r'Item\s+1A', text[start_pos + 10:], re.IGNORECASE)
+            if not item_1a_match:
+                return "Could not find end of Business Description section"
+            
+            end_pos = start_pos + 10 + item_1a_match.start()
+            
+            # Extract the business description text
+            biz_text = text[start_pos:end_pos]
+            
+            # Clean it up
+            biz_text = self._clean_text(biz_text)
+            
+            # Remove the header
+            biz_text = re.sub(r'^Item\s+1\.?\s*Business\s*', '', biz_text, flags=re.IGNORECASE)
+            
+            print(f"    [Debug] Business Description extracted from position {start_pos} to {end_pos}")
+            
+            if len(biz_text) > 1000:
+                # Item 1 can be very long — cap at 20K chars for AI processing
+                return biz_text[:20000]
+            else:
+                return "Business Description section appears too short after extraction."
+                
+        except Exception as e:
+            return f"Error extracting business description: {str(e)}"
+    
+    def extract_all_sections(self, file_path):
+        """
+        Extract all key sections from a 10-K in one call.
+        Returns: dict with business_description, risk_factors, mda
+        """
+        return {
+            "business_description": self.extract_business_description(file_path),
+            "risk_factors": self.extract_risk_factors(file_path),
+            "mda": self.extract_mda(file_path),
+        }
     
     def extract_risk_factors(self, file_path):
         """
@@ -250,20 +332,30 @@ if __name__ == "__main__":
         print(f"    Ticker: {filing_info['ticker']}")
         print(f"    Filing Date: {filing_info['filing_date']}")
         
-        print("\n[2/4] Extracting Risk Factors...")
+        print("\n[2/5] Extracting Business Description (Item 1)...")
+        biz = parser.extract_business_description(filing_info['file_path'])
+        print(f"✅ Extracted {len(biz)} characters")
+        print(f"    Preview: {biz[:200]}...")
+        
+        print("\n[3/5] Extracting Risk Factors...")
         risks = parser.extract_risk_factors(filing_info['file_path'])
         print(f"✅ Extracted {len(risks)} characters")
         print(f"    Preview: {risks[:200]}...")
         
-        print("\n[3/4] Extracting MD&A...")
+        print("\n[4/5] Extracting MD&A...")
         mda = parser.extract_mda(filing_info['file_path'])
         print(f"✅ Extracted {len(mda)} characters")
         print(f"    Preview: {mda[:200]}...")
         
-        print("\n[4/4] Getting metadata...")
+        print("\n[5/5] Getting metadata...")
         metadata = parser.get_filing_metadata(filing_info['file_path'])
         print(f"✅ Metadata extracted")
         print(f"    Fiscal Year End: {metadata.get('fiscal_year_end', 'N/A')}")
+        
+        print("\n[Bonus] Testing extract_all_sections...")
+        all_sections = parser.extract_all_sections(filing_info['file_path'])
+        for section, content in all_sections.items():
+            print(f"    {section}: {len(content)} chars")
     
     print("\n" + "="*60)
     print("SEC PARSER TEST COMPLETE ✅")
