@@ -24,7 +24,8 @@ from ai_analyzer import (
     run_business_deep_dive,
     analyze_financial_trends,
     analyze_forward_scenarios,
-    analyze_relative_valuation
+    analyze_relative_valuation,
+    analyze_risk_framework
 )
 from sec_parser import SECParser
 
@@ -435,7 +436,7 @@ if analyze_btn and ticker_input:
             # Fetch all data
             progress = st.empty()
             
-            progress.info("📊 Step 1/9: Fetching stock data and financials...")
+            progress.info("📊 Step 1/10: Fetching stock data and financials...")
             stock_data = get_stock_data(ticker_input)
             fund_data = get_fundamental_data(ticker_input)
             
@@ -443,11 +444,11 @@ if analyze_btn and ticker_input:
                 st.error(f"❌ Could not fetch data for {ticker_input}. Please check the ticker symbol.")
                 st.stop()
             
-            progress.info("📰 Step 2/9: Fetching news and peer data...")
+            progress.info("📰 Step 2/10: Fetching news and peer data...")
             news = get_company_news(ticker_input, ticker_input)
             peer_data = get_comprehensive_peer_data(ticker_input, peers) if peers else {}
             
-            progress.info("📜 Step 3/9: Downloading SEC filing and business data...")
+            progress.info("📜 Step 3/10: Downloading SEC filing and business data...")
             # Phase 2 data: SEC filing, revenue segments, transcripts
             sec_sections = {}
             try:
@@ -463,19 +464,19 @@ if analyze_btn and ticker_input:
             segmentation_data = get_revenue_segmentation(ticker_input)
             transcript_data = get_earnings_transcript(ticker_input)
             
-            progress.info("🔬 Step 4/9: AI deep dive — business model, moat, management signals...")
+            progress.info("🔬 Step 4/10: AI deep dive — business model, moat, management signals...")
             deep_dive_result = run_business_deep_dive(
                 ticker_input, sec_sections, segmentation_data, transcript_data
             )
             
-            progress.info("📊 Step 5/9: Fetching 5-year financial history...")
+            progress.info("📊 Step 5/10: Fetching 5-year financial history...")
             historical_data = get_historical_financials(ticker_input)
             financial_trends = compute_financial_trends(historical_data) if historical_data else None
             
-            progress.info("🔮 Step 6/9: Fetching analyst estimates...")
+            progress.info("🔮 Step 6/10: Fetching analyst estimates...")
             analyst_estimates = get_analyst_estimates(ticker_input)
             
-            progress.info("🧠 Step 7/9: AI analyzing financials, trends, and scenarios...")
+            progress.info("🧠 Step 7/10: AI analyzing financials, trends, and scenarios...")
             health_analysis = analyze_financial_health(ticker_input, fund_data)
             trend_analysis = analyze_price_trend(ticker_input, stock_data)
             historical_trend_analysis = analyze_financial_trends(ticker_input, financial_trends) if financial_trends else None
@@ -487,13 +488,24 @@ if analyze_btn and ticker_input:
                 fund_data.get('pe_ratio') if fund_data else None
             ) if analyst_estimates else None
             
-            progress.info("🧠 Step 8/9: AI analyzing peers and valuation...")
+            progress.info("🧠 Step 8/10: AI analyzing peers and valuation...")
             valuation_context = compute_valuation_context(historical_data) if historical_data else None
             peer_analysis = analyze_peer_comparison(ticker_input, peer_data) if peer_data else "No peer data provided."
             relative_valuation = analyze_relative_valuation(ticker_input, valuation_context, peer_data) if (valuation_context or peer_data) else None
             
-            progress.info("🧠 Step 9/9: AI analyzing news and generating summary...")
+            progress.info("🧠 Step 9/10: AI analyzing news and risks...")
             news_analysis = analyze_news_sentiment(ticker_input, news)
+            
+            # Phase 6: Risk framework — uses data already fetched
+            risk_framework = analyze_risk_framework(
+                ticker_input,
+                sec_sections.get('risk_factors', ''),
+                deep_dive_result.get('stage1', {}).get('moat_signals', '') if deep_dive_result else '',
+                fund_data,
+                news_analysis
+            )
+            
+            progress.info("🧠 Step 10/10: Generating investment summary...")
             
             # Generate summary
             all_analyses = {
@@ -1002,6 +1014,16 @@ if analyze_btn and ticker_input:
                         st.divider()
             else:
                 st.info("No recent news articles found.")
+            
+            # ============================================================
+            # PHASE 6: Risk Framework
+            # ============================================================
+            if risk_framework and not risk_framework.startswith('Error') and not risk_framework.startswith('Insufficient'):
+                st.markdown('<div class="section-header">⚠️ Risk Framework</div>', unsafe_allow_html=True)
+                st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
+                st.markdown('<div class="analysis-title">🤖 AI Structured Risk Assessment (sourced from 10-K, financials, news)</div>', unsafe_allow_html=True)
+                st.markdown(risk_framework)
+                st.markdown('</div>', unsafe_allow_html=True)
             
             # Disclaimer
             st.divider()

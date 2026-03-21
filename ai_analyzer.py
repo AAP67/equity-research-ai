@@ -711,6 +711,80 @@ Use specific numbers. Flag any multiple that's more than 20% above or below the 
         return f"Error: {str(e)}"
 
 
+# ============================================================
+# PHASE 6: STRUCTURED RISK FRAMEWORK
+# ============================================================
+
+def analyze_risk_framework(ticker, risk_factors, moat_signals, fund_data, news_analysis):
+    """
+    Identify top 3 thesis-breaking risks with probability, impact, and early warnings.
+    Synthesizes across 10-K risk factors, moat analysis, financial data, and news.
+    One Claude call.
+    """
+    # Build context from available sources
+    context = ""
+    
+    if risk_factors and not any(m in risk_factors for m in ["not available", "Error:", "Could not"]):
+        context += f"10-K RISK FACTORS (excerpt):\n{risk_factors[:8000]}\n\n"
+    
+    if moat_signals and not any(m in moat_signals for m in ["not available", "Error:", "Could not"]):
+        context += f"MOAT ANALYSIS:\n{moat_signals}\n\n"
+    
+    if fund_data:
+        context += "KEY FINANCIAL METRICS:\n"
+        for key in ['pe_ratio', 'profit_margin', 'roe', 'revenue_growth_yoy', 'beta', 'ev_to_ebitda']:
+            val = fund_data.get(key, 'N/A')
+            if isinstance(val, (int, float)):
+                context += f"  {key}: {val}\n"
+            else:
+                context += f"  {key}: {val}\n"
+        context += "\n"
+    
+    if news_analysis and not news_analysis.startswith("Error") and not news_analysis.startswith("No recent"):
+        context += f"RECENT NEWS SENTIMENT:\n{news_analysis}\n\n"
+    
+    if not context.strip():
+        return "Insufficient data to build risk framework."
+    
+    prompt = f"""You are a senior equity research analyst building the Risk Framework section for {ticker}.
+
+{context}
+
+Produce a structured risk assessment (400 words max). Do NOT produce a generic list. Identify the risks that would specifically break an investment thesis for {ticker}.
+
+## Top 3 Thesis-Breaking Risks
+
+For each risk:
+
+### Risk 1: [Name it in 5 words or less]
+- **What**: One sentence describing the specific risk
+- **Probability**: Low / Medium / High — with one sentence justification
+- **Impact if realized**: Quantify it — what happens to revenue, margins, or valuation? (e.g., "Could compress margins by 500-800bps" or "Would eliminate ~30% of revenue")
+- **Early warning signal**: What specific, observable metric or event would indicate this risk is materializing?
+- **Thesis impact**: Would this be thesis-damaging (recoverable) or thesis-breaking (permanent impairment)?
+
+### Risk 2: [Name]
+(same structure)
+
+### Risk 3: [Name]
+(same structure)
+
+## Risk-Reward Summary
+One paragraph: Given these risks, is the current valuation adequately compensating investors for the risk profile? Are the risks priced in or is the market complacent?
+
+Ground every risk in specific evidence from the data provided. No generic risks like "macroeconomic downturn" unless there's specific evidence it's relevant."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     from data_fetchers import (
         get_stock_data, 
