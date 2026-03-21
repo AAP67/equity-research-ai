@@ -473,6 +473,178 @@ def get_earnings_transcript(ticker, num_quarters=2):
 
 
 # ============================================================
+# PHASE 3: HISTORICAL FINANCIALS (5-Year Trends)
+# ============================================================
+
+def get_historical_financials(ticker, years=5):
+    """
+    Fetch 5 years of income statements, cash flows, and ratios.
+    Returns: dict with 'income', 'cashflow', 'ratios' keys, each a list of annual dicts.
+    Sorted oldest-to-newest for trend analysis.
+    """
+    if not FMP_API_KEY:
+        return None
+    
+    result = {}
+    
+    try:
+        # Income statements
+        url = f"https://financialmodelingprep.com/stable/income-statement?symbol={ticker}&limit={years}&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data and isinstance(data, list):
+            result['income'] = sorted(data, key=lambda x: x.get('date', ''))
+            print(f"[FMP] Historical income statements fetched for {ticker}: {len(result['income'])} years")
+        else:
+            result['income'] = []
+    except Exception as e:
+        print(f"[FMP] Error fetching historical income for {ticker}: {e}")
+        result['income'] = []
+    
+    try:
+        # Cash flow statements
+        url = f"https://financialmodelingprep.com/stable/cash-flow-statement?symbol={ticker}&limit={years}&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data and isinstance(data, list):
+            result['cashflow'] = sorted(data, key=lambda x: x.get('date', ''))
+            print(f"[FMP] Historical cash flows fetched for {ticker}: {len(result['cashflow'])} years")
+        else:
+            result['cashflow'] = []
+    except Exception as e:
+        print(f"[FMP] Error fetching historical cash flow for {ticker}: {e}")
+        result['cashflow'] = []
+    
+    try:
+        # Financial ratios
+        url = f"https://financialmodelingprep.com/stable/ratios?symbol={ticker}&limit={years}&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if data and isinstance(data, list):
+            result['ratios'] = sorted(data, key=lambda x: x.get('date', ''))
+            print(f"[FMP] Historical ratios fetched for {ticker}: {len(result['ratios'])} years")
+        else:
+            result['ratios'] = []
+    except Exception as e:
+        print(f"[FMP] Error fetching historical ratios for {ticker}: {e}")
+        result['ratios'] = []
+    
+    return result if any(result.values()) else None
+
+
+def compute_financial_trends(historical_data):
+    """
+    Pure Python — no API calls. Computes trend metrics from historical financials.
+    Returns: dict with computed trends, CAGRs, and direction indicators.
+    """
+    if not historical_data:
+        return None
+    
+    income = historical_data.get('income', [])
+    cashflow = historical_data.get('cashflow', [])
+    ratios = historical_data.get('ratios', [])
+    
+    trends = {
+        'years': [],
+        'revenue': [],
+        'net_income': [],
+        'gross_margin': [],
+        'operating_margin': [],
+        'net_margin': [],
+        'roe': [],
+        'fcf': [],
+        'capex': [],
+        'capex_pct_revenue': [],
+        'cash_conversion': [],
+    }
+    
+    # Build year-by-year data (oldest to newest)
+    for i, inc in enumerate(income):
+        year = inc.get('fiscalYear') or inc.get('date', '?')[:4]
+        revenue = inc.get('revenue', 0)
+        net_income = inc.get('netIncome', 0)
+        
+        trends['years'].append(str(year))
+        trends['revenue'].append(revenue)
+        trends['net_income'].append(net_income)
+        
+        # Capex and FCF from cashflow (matched by index)
+        if i < len(cashflow):
+            fcf = cashflow[i].get('freeCashFlow', 0)
+            capex = abs(cashflow[i].get('capitalExpenditure', 0))
+            trends['fcf'].append(fcf)
+            trends['capex'].append(capex)
+            trends['capex_pct_revenue'].append(round(capex / revenue * 100, 1) if revenue else 0)
+            trends['cash_conversion'].append(round(fcf / net_income * 100, 1) if net_income and net_income > 0 else 0)
+        
+        # Margins and ROE from ratios (matched by index)
+        if i < len(ratios):
+            r = ratios[i]
+            trends['gross_margin'].append(round((r.get('grossProfitMargin') or 0) * 100, 1))
+            trends['operating_margin'].append(round((r.get('operatingProfitMargin') or 0) * 100, 1))
+            trends['net_margin'].append(round((r.get('netProfitMargin') or 0) * 100, 1))
+            trends['roe'].append(round((r.get('returnOnEquity') or 0) * 100, 1))
+    
+    # Computed summary metrics
+    def _cagr(start, end, years):
+        if not start or start <= 0 or not end or end <= 0 or years <= 0:
+            return None
+        return round(((end / start) ** (1 / years) - 1) * 100, 1)
+    
+    def _trend_direction(values):
+        """Returns 'expanding', 'compressing', or 'stable' based on first vs last half"""
+        if len(values) < 3:
+            return 'insufficient data'
+        mid = len(values) // 2
+        first_half_avg = sum(values[:mid]) / mid
+        second_half_avg = sum(values[mid:]) / (len(values) - mid)
+        diff_pct = ((second_half_avg - first_half_avg) / abs(first_half_avg) * 100) if first_half_avg else 0
+        if diff_pct > 5:
+            return 'expanding'
+        elif diff_pct < -5:
+            return 'compressing'
+        else:
+            return 'stable'
+    
+    rev = trends['revenue']
+    summary = {}
+    
+    # Revenue CAGRs
+    if len(rev) >= 4:
+        summary['revenue_cagr_3yr'] = _cagr(rev[-4], rev[-1], 3)
+    if len(rev) >= 5:
+        summary['revenue_cagr_5yr'] = _cagr(rev[0], rev[-1], len(rev) - 1)
+    
+    # Latest year metrics
+    if rev:
+        summary['latest_revenue'] = rev[-1]
+        summary['latest_net_income'] = trends['net_income'][-1] if trends['net_income'] else None
+    
+    # Trend directions
+    if trends['gross_margin']:
+        summary['gross_margin_trend'] = _trend_direction(trends['gross_margin'])
+    if trends['operating_margin']:
+        summary['operating_margin_trend'] = _trend_direction(trends['operating_margin'])
+    if trends['net_margin']:
+        summary['net_margin_trend'] = _trend_direction(trends['net_margin'])
+    if trends['roe']:
+        summary['roe_trend'] = _trend_direction(trends['roe'])
+    
+    # Cash conversion average
+    if trends['cash_conversion']:
+        valid_cc = [c for c in trends['cash_conversion'] if c > 0]
+        summary['avg_cash_conversion'] = round(sum(valid_cc) / len(valid_cc), 1) if valid_cc else 0
+    
+    # Capex intensity trend
+    if trends['capex_pct_revenue']:
+        summary['capex_intensity_trend'] = _trend_direction(trends['capex_pct_revenue'])
+        summary['latest_capex_pct'] = trends['capex_pct_revenue'][-1]
+    
+    trends['summary'] = summary
+    return trends
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 

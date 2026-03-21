@@ -476,6 +476,95 @@ def run_business_deep_dive(ticker, sec_sections, segmentation_data, transcript_d
         'synthesis': synthesis,
         'data_sources': data_sources,
     }
+
+
+# ============================================================
+# PHASE 3: HISTORICAL FINANCIAL TREND ANALYSIS
+# ============================================================
+
+def analyze_financial_trends(ticker, trends):
+    """
+    Analyze 5-year financial trends. One Claude call.
+    Input: trends dict from compute_financial_trends().
+    """
+    if not trends or not trends.get('years'):
+        return "Historical financial data not available."
+    
+    summary = trends.get('summary', {})
+    
+    # Build a trend table for the prompt
+    table = "YEAR | REVENUE | NET INCOME | GROSS MARGIN | OP MARGIN | NET MARGIN | ROE | FCF | CAPEX % REV | CASH CONVERSION\n"
+    table += "-" * 120 + "\n"
+    
+    for i, year in enumerate(trends['years']):
+        rev = f"${trends['revenue'][i]/1e9:.1f}B" if i < len(trends['revenue']) else "?"
+        ni = f"${trends['net_income'][i]/1e9:.1f}B" if i < len(trends['net_income']) else "?"
+        gm = f"{trends['gross_margin'][i]}%" if i < len(trends['gross_margin']) else "?"
+        om = f"{trends['operating_margin'][i]}%" if i < len(trends['operating_margin']) else "?"
+        nm = f"{trends['net_margin'][i]}%" if i < len(trends['net_margin']) else "?"
+        roe = f"{trends['roe'][i]}%" if i < len(trends['roe']) else "?"
+        fcf = f"${trends['fcf'][i]/1e9:.1f}B" if i < len(trends['fcf']) else "?"
+        capex = f"{trends['capex_pct_revenue'][i]}%" if i < len(trends['capex_pct_revenue']) else "?"
+        cc = f"{trends['cash_conversion'][i]}%" if i < len(trends['cash_conversion']) else "?"
+        table += f"{year} | {rev} | {ni} | {gm} | {om} | {nm} | {roe} | {fcf} | {capex} | {cc}\n"
+    
+    # Summary stats for prompt
+    summary_text = ""
+    if summary.get('revenue_cagr_3yr') is not None:
+        summary_text += f"- Revenue 3-Year CAGR: {summary['revenue_cagr_3yr']}%\n"
+    if summary.get('revenue_cagr_5yr') is not None:
+        summary_text += f"- Revenue 5-Year CAGR: {summary['revenue_cagr_5yr']}%\n"
+    if summary.get('gross_margin_trend'):
+        summary_text += f"- Gross Margin Trend: {summary['gross_margin_trend']}\n"
+    if summary.get('operating_margin_trend'):
+        summary_text += f"- Operating Margin Trend: {summary['operating_margin_trend']}\n"
+    if summary.get('net_margin_trend'):
+        summary_text += f"- Net Margin Trend: {summary['net_margin_trend']}\n"
+    if summary.get('roe_trend'):
+        summary_text += f"- ROE Trend: {summary['roe_trend']}\n"
+    if summary.get('avg_cash_conversion'):
+        summary_text += f"- Avg Cash Conversion (FCF/NI): {summary['avg_cash_conversion']}%\n"
+    if summary.get('capex_intensity_trend'):
+        summary_text += f"- Capex Intensity Trend: {summary['capex_intensity_trend']} (latest: {summary.get('latest_capex_pct', '?')}% of revenue)\n"
+    
+    prompt = f"""You are an equity research analyst reviewing {ticker}'s 5-year financial trajectory.
+
+HISTORICAL DATA:
+{table}
+
+COMPUTED TRENDS:
+{summary_text}
+
+Produce a trend analysis (350 words max) with these sections:
+
+## Growth Trajectory
+Is revenue growth accelerating, decelerating, or steady? What's the CAGR telling us vs. the year-over-year pattern? Is this sustainable?
+
+## Margin Story
+Are margins expanding or compressing? Is the company getting more efficient (operating leverage) or are costs growing faster than revenue? Highlight any inflection points.
+
+## Earnings Quality
+Is the company converting profits to cash (cash conversion ratio)? A ratio well above 100% is strong. Below 80% is a red flag. What does capex intensity tell us — growth investment or maintenance?
+
+## ROE Trajectory
+Is return on equity improving? If so, is it from better margins, better asset utilization, or more leverage? (DuPont decomposition logic)
+
+## Key Inflection
+Identify the single most important trend change in the data — the one number or shift that would most affect an investment thesis.
+
+Use specific numbers from the data. Write like an analyst briefing a PM, not a textbook."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1200,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     from data_fetchers import (
         get_stock_data, 

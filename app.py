@@ -9,7 +9,9 @@ from data_fetchers import (
     get_comprehensive_peer_data,
     format_market_cap,
     get_revenue_segmentation,
-    get_earnings_transcript
+    get_earnings_transcript,
+    get_historical_financials,
+    compute_financial_trends
 )
 from ai_analyzer import (
     analyze_financial_health,
@@ -17,7 +19,8 @@ from ai_analyzer import (
     analyze_price_trend,
     analyze_news_sentiment,
     generate_investment_summary,
-    run_business_deep_dive
+    run_business_deep_dive,
+    analyze_financial_trends
 )
 from sec_parser import SECParser
 
@@ -428,7 +431,7 @@ if analyze_btn and ticker_input:
             # Fetch all data
             progress = st.empty()
             
-            progress.info("📊 Step 1/6: Fetching stock data and financials...")
+            progress.info("📊 Step 1/7: Fetching stock data and financials...")
             stock_data = get_stock_data(ticker_input)
             fund_data = get_fundamental_data(ticker_input)
             
@@ -436,11 +439,11 @@ if analyze_btn and ticker_input:
                 st.error(f"❌ Could not fetch data for {ticker_input}. Please check the ticker symbol.")
                 st.stop()
             
-            progress.info("📰 Step 2/6: Fetching news and peer data...")
+            progress.info("📰 Step 2/7: Fetching news and peer data...")
             news = get_company_news(ticker_input, ticker_input)
             peer_data = get_comprehensive_peer_data(ticker_input, peers) if peers else {}
             
-            progress.info("📜 Step 3/6: Downloading SEC filing and business data...")
+            progress.info("📜 Step 3/7: Downloading SEC filing and business data...")
             # Phase 2 data: SEC filing, revenue segments, transcripts
             sec_sections = {}
             try:
@@ -456,16 +459,21 @@ if analyze_btn and ticker_input:
             segmentation_data = get_revenue_segmentation(ticker_input)
             transcript_data = get_earnings_transcript(ticker_input)
             
-            progress.info("🔬 Step 4/6: AI deep dive — business model, moat, management signals...")
+            progress.info("🔬 Step 4/7: AI deep dive — business model, moat, management signals...")
             deep_dive_result = run_business_deep_dive(
                 ticker_input, sec_sections, segmentation_data, transcript_data
             )
             
-            progress.info("🧠 Step 5/6: AI analyzing financials and trends...")
+            progress.info("📊 Step 5/7: Fetching 5-year financial history...")
+            historical_data = get_historical_financials(ticker_input)
+            financial_trends = compute_financial_trends(historical_data) if historical_data else None
+            
+            progress.info("🧠 Step 6/7: AI analyzing financials and trends...")
             health_analysis = analyze_financial_health(ticker_input, fund_data)
             trend_analysis = analyze_price_trend(ticker_input, stock_data)
+            historical_trend_analysis = analyze_financial_trends(ticker_input, financial_trends) if financial_trends else None
             
-            progress.info("🧠 Step 6/6: AI analyzing peers and news...")
+            progress.info("🧠 Step 7/7: AI analyzing peers and news...")
             peer_analysis = analyze_peer_comparison(ticker_input, peer_data) if peer_data else "No peer data provided."
             news_analysis = analyze_news_sentiment(ticker_input, news)
             
@@ -781,6 +789,67 @@ if analyze_btn and ticker_input:
             st.markdown('<div class="analysis-title">🤖 AI Financial Health Analysis</div>', unsafe_allow_html=True)
             st.markdown(health_analysis)
             st.markdown('</div>', unsafe_allow_html=True)
+            
+            # ============================================================
+            # PHASE 3: Historical Financial Trends
+            # ============================================================
+            if financial_trends and financial_trends.get('years'):
+                st.markdown('<div class="section-header">📈 5-Year Financial Trajectory</div>', unsafe_allow_html=True)
+                
+                summary = financial_trends.get('summary', {})
+                
+                # Summary metrics row
+                tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+                with tcol1:
+                    cagr_3 = summary.get('revenue_cagr_3yr')
+                    st.metric("Revenue CAGR (3Y)", f"{cagr_3}%" if cagr_3 is not None else "N/A")
+                with tcol2:
+                    cagr_5 = summary.get('revenue_cagr_5yr')
+                    st.metric("Revenue CAGR (5Y)", f"{cagr_5}%" if cagr_5 is not None else "N/A")
+                with tcol3:
+                    cc = summary.get('avg_cash_conversion')
+                    st.metric("Avg Cash Conversion", f"{cc}%" if cc else "N/A")
+                with tcol4:
+                    capex = summary.get('latest_capex_pct')
+                    st.metric("Capex / Revenue", f"{capex}%" if capex else "N/A")
+                
+                # Trend direction indicators
+                tcol1, tcol2, tcol3, tcol4 = st.columns(4)
+                def _trend_icon(trend):
+                    if trend == 'expanding': return '🟢 Expanding'
+                    elif trend == 'compressing': return '🔴 Compressing'
+                    elif trend == 'stable': return '🟡 Stable'
+                    else: return '⚪ N/A'
+                
+                with tcol1:
+                    st.metric("Gross Margin", _trend_icon(summary.get('gross_margin_trend', '')))
+                with tcol2:
+                    st.metric("Operating Margin", _trend_icon(summary.get('operating_margin_trend', '')))
+                with tcol3:
+                    st.metric("Net Margin", _trend_icon(summary.get('net_margin_trend', '')))
+                with tcol4:
+                    st.metric("ROE", _trend_icon(summary.get('roe_trend', '')))
+                
+                # Historical data table
+                with st.expander("📋 View 5-Year Data Table"):
+                    hist_rows = []
+                    for i, year in enumerate(financial_trends['years']):
+                        row = {'Year': year}
+                        row['Revenue'] = f"${financial_trends['revenue'][i]/1e9:.1f}B" if i < len(financial_trends['revenue']) else ''
+                        row['Net Income'] = f"${financial_trends['net_income'][i]/1e9:.1f}B" if i < len(financial_trends['net_income']) else ''
+                        row['Gross Margin'] = f"{financial_trends['gross_margin'][i]}%" if i < len(financial_trends['gross_margin']) else ''
+                        row['Op Margin'] = f"{financial_trends['operating_margin'][i]}%" if i < len(financial_trends['operating_margin']) else ''
+                        row['ROE'] = f"{financial_trends['roe'][i]}%" if i < len(financial_trends['roe']) else ''
+                        row['FCF'] = f"${financial_trends['fcf'][i]/1e9:.1f}B" if i < len(financial_trends['fcf']) else ''
+                        hist_rows.append(row)
+                    st.dataframe(pd.DataFrame(hist_rows), hide_index=True, use_container_width=True)
+                
+                # AI trend analysis
+                if historical_trend_analysis and not historical_trend_analysis.startswith('Error'):
+                    st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
+                    st.markdown('<div class="analysis-title">🤖 AI Financial Trajectory Analysis (5-Year Trends)</div>', unsafe_allow_html=True)
+                    st.markdown(historical_trend_analysis)
+                    st.markdown('</div>', unsafe_allow_html=True)
             
             # Peer Comparison
             if peer_data:
