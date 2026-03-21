@@ -646,6 +646,71 @@ Be specific with numbers. Every target price must show the EPS × P/E calculatio
         return f"Error: {str(e)}"
 
 
+# ============================================================
+# PHASE 5: RELATIVE VALUATION ANALYSIS
+# ============================================================
+
+def analyze_relative_valuation(ticker, valuation_context, peer_data):
+    """
+    Analyze valuation vs. own history and vs. peers. One Claude call.
+    Combines historical valuation bands with peer comparison.
+    """
+    if not valuation_context and not peer_data:
+        return "Valuation data not available."
+    
+    # Format historical valuation context
+    hist_text = ""
+    if valuation_context and valuation_context.get('multiples'):
+        hist_text = f"HISTORICAL VALUATION BANDS ({ticker} vs. own 5-year history):\n"
+        hist_text += f"{'Metric':<15} {'Current':>10} {'5Y Avg':>10} {'5Y High':>10} {'5Y Low':>10} {'vs Avg':>10}\n"
+        hist_text += "-" * 70 + "\n"
+        for m_key, m_data in valuation_context['multiples'].items():
+            if m_data.get('current') is not None:
+                vs_avg = f"{m_data['vs_avg_pct']:+.1f}%" if m_data.get('vs_avg_pct') is not None else "N/A"
+                hist_text += f"{m_data['label']:<15} {m_data['current']:>10.1f} {m_data['avg_5yr']:>10.1f} {m_data['high_5yr']:>10.1f} {m_data['low_5yr']:>10.1f} {vs_avg:>10}\n"
+    
+    # Format peer data
+    peer_text = ""
+    if peer_data:
+        peer_text = f"\nPEER COMPARISON:\n"
+        peer_text += f"{'Ticker':<10} {'Price':>10} {'30D Chg':>10} {'P/E':>10} {'Margin':>12} {'ROE':>10} {'EV/EBITDA':>12}\n"
+        peer_text += "-" * 80 + "\n"
+        for t, m in peer_data.items():
+            pe = f"{m['pe_ratio']:.1f}" if isinstance(m.get('pe_ratio'), (int, float)) else str(m.get('pe_ratio', 'N/A'))
+            ev = f"{m['ev_to_ebitda']:.1f}" if isinstance(m.get('ev_to_ebitda'), (int, float)) else str(m.get('ev_to_ebitda', 'N/A'))
+            chg = f"{m['change_30d']:+.1f}%" if isinstance(m.get('change_30d'), (int, float)) else str(m.get('change_30d', 'N/A'))
+            peer_text += f"{t:<10} ${m.get('price','?'):>8} {chg:>10} {pe:>10} {str(m.get('profit_margin','N/A')):>12} {str(m.get('roe','N/A')):>10} {ev:>12}\n"
+    
+    prompt = f"""You are an equity research analyst writing the Valuation section of a research report on {ticker}.
+
+{hist_text}
+
+{peer_text}
+
+Produce a valuation analysis (350 words max) with these sections:
+
+## Valuation vs. Own History
+Where does {ticker} trade now vs. its 5-year average on each multiple? Is it at a premium or discount to itself? Is the premium/discount justified by changes in growth or quality?
+
+## Valuation vs. Peers
+How does {ticker}'s valuation compare to the peer group? Which peer looks cheapest on each metric? Is {ticker}'s premium (if any) justified by superior growth or margins?
+
+## Valuation Verdict
+One-paragraph synthesis: Is {ticker} expensive, fairly valued, or cheap? On what basis? What multiple would you anchor a valuation to and why?
+
+Use specific numbers. Flag any multiple that's more than 20% above or below the 5-year average as noteworthy."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1200,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     from data_fetchers import (
         get_stock_data, 

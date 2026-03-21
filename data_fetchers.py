@@ -695,6 +695,72 @@ def get_analyst_estimates(ticker, years=3):
 
 
 # ============================================================
+# PHASE 5: HISTORICAL VALUATION CONTEXT
+# ============================================================
+
+def compute_valuation_context(historical_data):
+    """
+    Extract valuation multiples from the 5-year ratios data (already fetched in Phase 3).
+    Computes current vs. historical average to show premium/discount to self.
+    No new API calls needed.
+    """
+    if not historical_data or not historical_data.get('ratios'):
+        return None
+    
+    ratios = historical_data['ratios']  # Already sorted oldest-to-newest
+    
+    metrics = {
+        'pe': {'key': 'priceToEarningsRatio', 'label': 'P/E Ratio'},
+        'ps': {'key': 'priceToSalesRatio', 'label': 'P/S Ratio'},
+        'pfcf': {'key': 'priceToFreeCashFlowRatio', 'label': 'P/FCF Ratio'},
+        'ev_ebitda': {'key': 'enterpriseValueMultiple', 'label': 'EV/EBITDA'},
+        'peg': {'key': 'priceEarningsToGrowthRatio', 'label': 'PEG Ratio'},
+    }
+    
+    result = {'years': [], 'multiples': {}}
+    
+    for m_key, m_info in metrics.items():
+        values = []
+        for r in ratios:
+            val = r.get(m_info['key'])
+            if val is not None and isinstance(val, (int, float)) and val > 0 and val < 1000:
+                values.append(round(val, 2))
+            else:
+                values.append(None)
+        result['multiples'][m_key] = {
+            'label': m_info['label'],
+            'values': values,
+        }
+    
+    # Extract years
+    for r in ratios:
+        year = r.get('fiscalYear') or r.get('date', '?')[:4]
+        result['years'].append(str(year))
+    
+    # Compute summary for each multiple
+    for m_key, m_data in result['multiples'].items():
+        valid = [v for v in m_data['values'] if v is not None]
+        if valid:
+            m_data['current'] = valid[-1]
+            m_data['avg_5yr'] = round(sum(valid) / len(valid), 2)
+            m_data['high_5yr'] = max(valid)
+            m_data['low_5yr'] = min(valid)
+            # Premium/discount to own average
+            if m_data['avg_5yr'] > 0:
+                m_data['vs_avg_pct'] = round(((m_data['current'] / m_data['avg_5yr']) - 1) * 100, 1)
+            else:
+                m_data['vs_avg_pct'] = None
+        else:
+            m_data['current'] = None
+            m_data['avg_5yr'] = None
+            m_data['high_5yr'] = None
+            m_data['low_5yr'] = None
+            m_data['vs_avg_pct'] = None
+    
+    return result
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
