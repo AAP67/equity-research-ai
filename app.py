@@ -502,15 +502,99 @@ if analyze_btn and ticker_input:
                     help="Full report as HTML — open in browser"
                 )
             with col2:
-                st.download_button(
-                    label="📕 Save as PDF",
-                    data=html_report,
-                    file_name=f"{ticker_input}_Analysis_{datetime.now().strftime('%Y%m%d')}.html",
-                    mime="text/html",
-                    type="primary",
-                    help="Open in browser → Ctrl+P → Save as PDF"
-                )
-                st.caption("Open → Ctrl+P → Save as PDF")
+                try:
+                    from fpdf import FPDF
+                    import io, re
+                    
+                    class ResearchPDF(FPDF):
+                        def header(self):
+                            self.set_font('Helvetica', 'B', 10)
+                            self.set_text_color(100, 100, 100)
+                            self.cell(0, 8, f'{ticker_input} Equity Research Report', align='R', new_x="LMARGIN", new_y="NEXT")
+                            self.line(10, self.get_y(), 200, self.get_y())
+                            self.ln(4)
+                        def footer(self):
+                            self.set_y(-15)
+                            self.set_font('Helvetica', 'I', 8)
+                            self.set_text_color(150, 150, 150)
+                            self.cell(0, 10, f'Page {self.page_no()} | Generated {datetime.now().strftime("%B %d, %Y")} | Karan Rajpal', align='C')
+                    
+                    def clean_md(text):
+                        if not text: return ''
+                        text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
+                        text = re.sub(r'#{1,3}\s*', '', text)
+                        text = text.replace('\u2014', '-').replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+                        return text.strip()
+                    
+                    def add_section(pdf, title, content):
+                        if not content or 'not available' in content.lower() or content.startswith('Error'):
+                            return
+                        pdf.set_font('Helvetica', 'B', 13)
+                        pdf.set_text_color(30, 58, 138)
+                        pdf.cell(0, 10, title, new_x="LMARGIN", new_y="NEXT")
+                        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+                        pdf.ln(3)
+                        pdf.set_font('Helvetica', '', 9.5)
+                        pdf.set_text_color(30, 41, 59)
+                        pdf.multi_cell(0, 5, clean_md(content))
+                        pdf.ln(5)
+                    
+                    company_name_pdf = fund_data.get('company_name', ticker_input) if fund_data else ticker_input
+                    sector_pdf = f"{fund_data.get('sector', 'N/A')} - {fund_data.get('industry', 'N/A')}" if fund_data else "N/A"
+                    
+                    pdf = ResearchPDF()
+                    pdf.set_auto_page_break(auto=True, margin=20)
+                    pdf.add_page()
+                    
+                    # Title
+                    pdf.set_font('Helvetica', 'B', 22)
+                    pdf.set_text_color(30, 58, 138)
+                    pdf.cell(0, 12, company_name_pdf, new_x="LMARGIN", new_y="NEXT")
+                    pdf.set_font('Helvetica', '', 12)
+                    pdf.set_text_color(100, 116, 139)
+                    pdf.cell(0, 8, f'{sector_pdf} | {datetime.now().strftime("%B %d, %Y")}', new_x="LMARGIN", new_y="NEXT")
+                    pdf.ln(3)
+                    
+                    # Quick Take
+                    pdf.set_font('Helvetica', 'B', 11)
+                    pdf.set_text_color(30, 41, 59)
+                    pe_str = f"{fund_data.get('pe_ratio', 'N/A'):.1f}x" if isinstance(fund_data.get('pe_ratio'), (int, float)) else 'N/A'
+                    quick = f"Price: ${stock_data['current_price']}  |  30D: {stock_data['price_change_pct_30d']:+.1f}%  |  Mkt Cap: {format_market_cap(fund_data.get('market_cap', 'N/A'))}  |  P/E: {pe_str}  |  Margin: {fund_data.get('profit_margin', 'N/A')}"
+                    pdf.cell(0, 8, quick, new_x="LMARGIN", new_y="NEXT")
+                    pdf.ln(5)
+                    
+                    # All sections
+                    add_section(pdf, 'Investment Summary', investment_summary)
+                    add_section(pdf, 'Business Model Deep Dive', deep_dive_result.get('synthesis', '') if deep_dive_result else '')
+                    add_section(pdf, 'Financial Health', health_analysis)
+                    add_section(pdf, '5-Year Financial Trajectory', historical_trend_analysis or '')
+                    add_section(pdf, 'Forward Estimates & Scenarios', forward_scenarios or '')
+                    add_section(pdf, 'Relative Valuation', relative_valuation or '')
+                    add_section(pdf, 'Peer Comparison', peer_analysis)
+                    add_section(pdf, 'Risk Framework', risk_framework or '')
+                    add_section(pdf, 'Catalyst Timeline', catalyst_timeline or '')
+                    add_section(pdf, 'Price Trend (30D)', trend_analysis)
+                    add_section(pdf, 'News & Sentiment', news_analysis)
+                    
+                    # Disclaimer
+                    pdf.ln(5)
+                    pdf.set_font('Helvetica', 'I', 8)
+                    pdf.set_text_color(150, 150, 150)
+                    pdf.multi_cell(0, 4, 'Disclaimer: This AI-generated analysis is for informational purposes only and should not be considered investment advice. Always conduct your own research and consult with financial professionals before making investment decisions.')
+                    
+                    pdf_buffer = io.BytesIO()
+                    pdf.output(pdf_buffer)
+                    pdf_bytes = pdf_buffer.getvalue()
+                    
+                    st.download_button(
+                        label="📕 Download PDF",
+                        data=pdf_bytes,
+                        file_name=f"{ticker_input}_Analysis_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                    )
+                except Exception as e:
+                    st.caption(f"PDF generation error: {e}")
             
             # Timestamp
             analysis_time = datetime.now().strftime("%B %d, %Y at %I:%M %p")
