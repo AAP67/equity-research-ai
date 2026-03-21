@@ -565,6 +565,87 @@ Use specific numbers from the data. Write like an analyst briefing a PM, not a t
         return f"Error: {str(e)}"
 
 
+# ============================================================
+# PHASE 4: FORWARD ESTIMATES & SCENARIO ANALYSIS
+# ============================================================
+
+def analyze_forward_scenarios(ticker, estimates, trends_summary, current_price, pe_ratio):
+    """
+    Generate bull/base/bear scenario table from consensus estimates + historical context.
+    One Claude call.
+    """
+    if not estimates:
+        return "Analyst estimates not available."
+    
+    # Format consensus estimates for prompt
+    est_text = "CONSENSUS ANALYST ESTIMATES:\n"
+    for est in estimates:
+        rev_avg = est['revenue_avg'] / 1e9
+        rev_low = est['revenue_low'] / 1e9
+        rev_high = est['revenue_high'] / 1e9
+        est_text += f"\n{est['date']}:\n"
+        est_text += f"  Revenue: ${rev_low:.1f}B (low) / ${rev_avg:.1f}B (avg) / ${rev_high:.1f}B (high)\n"
+        est_text += f"  EPS: ${est['eps_low']:.2f} (low) / ${est['eps_avg']:.2f} (avg) / ${est['eps_high']:.2f} (high)\n"
+        est_text += f"  Net Income: ${est['net_income_low']/1e9:.1f}B (low) / ${est['net_income_avg']/1e9:.1f}B (avg) / ${est['net_income_high']/1e9:.1f}B (high)\n"
+        if est.get('num_analysts_revenue'):
+            est_text += f"  Coverage: {est['num_analysts_revenue']} analysts (revenue), {est['num_analysts_eps']} (EPS)\n"
+    
+    # Historical context
+    hist_text = ""
+    if trends_summary:
+        if trends_summary.get('revenue_cagr_3yr') is not None:
+            hist_text += f"- Historical 3-Year Revenue CAGR: {trends_summary['revenue_cagr_3yr']}%\n"
+        if trends_summary.get('revenue_cagr_5yr') is not None:
+            hist_text += f"- Historical 5-Year Revenue CAGR: {trends_summary['revenue_cagr_5yr']}%\n"
+        if trends_summary.get('net_margin_trend'):
+            hist_text += f"- Net Margin Trend: {trends_summary['net_margin_trend']}\n"
+        if trends_summary.get('avg_cash_conversion'):
+            hist_text += f"- Avg Cash Conversion: {trends_summary['avg_cash_conversion']}%\n"
+    
+    # Current valuation
+    price_text = f"Current Price: ${current_price}\n" if current_price else ""
+    pe_text = f"Current P/E: {pe_ratio:.1f}x\n" if isinstance(pe_ratio, (int, float)) else ""
+    
+    prompt = f"""You are an equity research analyst building a scenario analysis for {ticker}.
+
+{est_text}
+
+HISTORICAL CONTEXT:
+{hist_text}
+
+CURRENT VALUATION:
+{price_text}{pe_text}
+
+Produce a scenario analysis (400 words max) with these sections:
+
+## Consensus View
+What are analysts expecting? Is consensus revenue growth accelerating or decelerating vs. historical rates? How wide is the bull-bear spread (indicates uncertainty)?
+
+## Bull Case
+State the key assumption (1 sentence). What revenue growth and margin would need to hold? Using the HIGH EPS estimate and a reasonable bull-case P/E multiple, what is the implied price target? Show the math: EPS × P/E = target price.
+
+## Base Case
+Anchored to consensus AVG estimates. Using the AVG EPS and the current P/E multiple, what is the implied price? How does this compare to current price — upside or downside?
+
+## Bear Case
+State the risk assumption (1 sentence). Using the LOW EPS estimate and a compressed P/E multiple, what is the implied downside target? Show the math.
+
+## Probability-Weighted View
+Assign rough probabilities (e.g., Bull 25%, Base 50%, Bear 25%) and compute an expected return. Is the risk/reward skewed favorably?
+
+Be specific with numbers. Every target price must show the EPS × P/E calculation."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     from data_fetchers import (
         get_stock_data, 

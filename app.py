@@ -11,7 +11,8 @@ from data_fetchers import (
     get_revenue_segmentation,
     get_earnings_transcript,
     get_historical_financials,
-    compute_financial_trends
+    compute_financial_trends,
+    get_analyst_estimates
 )
 from ai_analyzer import (
     analyze_financial_health,
@@ -20,7 +21,8 @@ from ai_analyzer import (
     analyze_news_sentiment,
     generate_investment_summary,
     run_business_deep_dive,
-    analyze_financial_trends
+    analyze_financial_trends,
+    analyze_forward_scenarios
 )
 from sec_parser import SECParser
 
@@ -431,7 +433,7 @@ if analyze_btn and ticker_input:
             # Fetch all data
             progress = st.empty()
             
-            progress.info("📊 Step 1/7: Fetching stock data and financials...")
+            progress.info("📊 Step 1/8: Fetching stock data and financials...")
             stock_data = get_stock_data(ticker_input)
             fund_data = get_fundamental_data(ticker_input)
             
@@ -439,11 +441,11 @@ if analyze_btn and ticker_input:
                 st.error(f"❌ Could not fetch data for {ticker_input}. Please check the ticker symbol.")
                 st.stop()
             
-            progress.info("📰 Step 2/7: Fetching news and peer data...")
+            progress.info("📰 Step 2/8: Fetching news and peer data...")
             news = get_company_news(ticker_input, ticker_input)
             peer_data = get_comprehensive_peer_data(ticker_input, peers) if peers else {}
             
-            progress.info("📜 Step 3/7: Downloading SEC filing and business data...")
+            progress.info("📜 Step 3/8: Downloading SEC filing and business data...")
             # Phase 2 data: SEC filing, revenue segments, transcripts
             sec_sections = {}
             try:
@@ -459,21 +461,31 @@ if analyze_btn and ticker_input:
             segmentation_data = get_revenue_segmentation(ticker_input)
             transcript_data = get_earnings_transcript(ticker_input)
             
-            progress.info("🔬 Step 4/7: AI deep dive — business model, moat, management signals...")
+            progress.info("🔬 Step 4/8: AI deep dive — business model, moat, management signals...")
             deep_dive_result = run_business_deep_dive(
                 ticker_input, sec_sections, segmentation_data, transcript_data
             )
             
-            progress.info("📊 Step 5/7: Fetching 5-year financial history...")
+            progress.info("📊 Step 5/8: Fetching 5-year financial history...")
             historical_data = get_historical_financials(ticker_input)
             financial_trends = compute_financial_trends(historical_data) if historical_data else None
             
-            progress.info("🧠 Step 6/7: AI analyzing financials and trends...")
+            progress.info("🔮 Step 6/8: Fetching analyst estimates...")
+            analyst_estimates = get_analyst_estimates(ticker_input)
+            
+            progress.info("🧠 Step 7/8: AI analyzing financials, trends, and scenarios...")
             health_analysis = analyze_financial_health(ticker_input, fund_data)
             trend_analysis = analyze_price_trend(ticker_input, stock_data)
             historical_trend_analysis = analyze_financial_trends(ticker_input, financial_trends) if financial_trends else None
+            forward_scenarios = analyze_forward_scenarios(
+                ticker_input,
+                analyst_estimates,
+                financial_trends.get('summary', {}) if financial_trends else {},
+                stock_data.get('current_price') if stock_data else None,
+                fund_data.get('pe_ratio') if fund_data else None
+            ) if analyst_estimates else None
             
-            progress.info("🧠 Step 7/7: AI analyzing peers and news...")
+            progress.info("🧠 Step 8/8: AI analyzing peers and news...")
             peer_analysis = analyze_peer_comparison(ticker_input, peer_data) if peer_data else "No peer data provided."
             news_analysis = analyze_news_sentiment(ticker_input, news)
             
@@ -849,6 +861,33 @@ if analyze_btn and ticker_input:
                     st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
                     st.markdown('<div class="analysis-title">🤖 AI Financial Trajectory Analysis (5-Year Trends)</div>', unsafe_allow_html=True)
                     st.markdown(historical_trend_analysis)
+                    st.markdown('</div>', unsafe_allow_html=True)
+            
+            # ============================================================
+            # PHASE 4: Forward Estimates & Scenario Analysis
+            # ============================================================
+            if analyst_estimates:
+                st.markdown('<div class="section-header">🔮 Forward Estimates & Scenario Analysis</div>', unsafe_allow_html=True)
+                
+                # Consensus estimates table
+                est_rows = []
+                for est in analyst_estimates:
+                    est_rows.append({
+                        'Period': est['date'],
+                        'Revenue (Avg)': f"${est['revenue_avg']/1e9:.1f}B",
+                        'Revenue Range': f"${est['revenue_low']/1e9:.1f}B – ${est['revenue_high']/1e9:.1f}B",
+                        'EPS (Avg)': f"${est['eps_avg']:.2f}",
+                        'EPS Range': f"${est['eps_low']:.2f} – ${est['eps_high']:.2f}",
+                        'Net Income (Avg)': f"${est['net_income_avg']/1e9:.1f}B",
+                        'Analysts': est.get('num_analysts_eps', 'N/A'),
+                    })
+                st.dataframe(pd.DataFrame(est_rows), hide_index=True, use_container_width=True)
+                
+                # AI scenario analysis
+                if forward_scenarios and not forward_scenarios.startswith('Error'):
+                    st.markdown('<div class="analysis-box">', unsafe_allow_html=True)
+                    st.markdown('<div class="analysis-title">🤖 AI Scenario Analysis (Bull / Base / Bear)</div>', unsafe_allow_html=True)
+                    st.markdown(forward_scenarios)
                     st.markdown('</div>', unsafe_allow_html=True)
             
             # Peer Comparison

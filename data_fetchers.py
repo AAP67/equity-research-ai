@@ -645,6 +645,56 @@ def compute_financial_trends(historical_data):
 
 
 # ============================================================
+# PHASE 4: ANALYST ESTIMATES (Forward Consensus)
+# ============================================================
+
+def get_analyst_estimates(ticker, years=3):
+    """
+    Fetch consensus analyst estimates (revenue, EPS, net income) for next 2-3 years.
+    Returns: list of dicts sorted nearest-to-farthest, with low/avg/high for each metric.
+    """
+    if not FMP_API_KEY:
+        return None
+    
+    try:
+        url = f"https://financialmodelingprep.com/stable/analyst-estimates?symbol={ticker}&period=annual&limit={years}&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        
+        if not data or not isinstance(data, list):
+            print(f"[FMP] No analyst estimates found for {ticker}")
+            return None
+        
+        # Sort nearest first
+        estimates = sorted(data, key=lambda x: x.get('date', ''))
+        
+        result = []
+        for est in estimates:
+            result.append({
+                'date': est.get('date', '?'),
+                'revenue_low': est.get('revenueLow', 0),
+                'revenue_avg': est.get('revenueAvg', 0),
+                'revenue_high': est.get('revenueHigh', 0),
+                'eps_low': est.get('epsLow', 0),
+                'eps_avg': est.get('epsAvg', 0),
+                'eps_high': est.get('epsHigh', 0),
+                'net_income_low': est.get('netIncomeLow', 0),
+                'net_income_avg': est.get('netIncomeAvg', 0),
+                'net_income_high': est.get('netIncomeHigh', 0),
+                'ebitda_avg': est.get('ebitdaAvg', 0),
+                'num_analysts_revenue': est.get('numAnalystsRevenue', 0),
+                'num_analysts_eps': est.get('numAnalystsEps', 0),
+            })
+        
+        print(f"[FMP] Analyst estimates fetched for {ticker}: {len(result)} periods")
+        return result
+    
+    except Exception as e:
+        print(f"[FMP] Error fetching analyst estimates for {ticker}: {e}")
+        return None
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
