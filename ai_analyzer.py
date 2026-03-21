@@ -23,7 +23,7 @@ Provide a brief analysis (150 words max):
 2. **Profitability**: How strong are the margins and returns?
 3. **Overall Health**: Quick verdict on financial strength.
 
-Be specific and actionable. Write like you're texting a fellow analyst."""
+Be specific and actionable. Write in a professional but concise tone — like an analyst note, not a text message."""
 
     try:
         message = client.messages.create(

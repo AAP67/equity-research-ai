@@ -31,218 +31,127 @@ from ai_analyzer import (
 )
 from sec_parser import SECParser
 
-# ADD THIS NEW FUNCTION HERE:
 def generate_html_report(ticker, company_name, sector, analyses, stock_data, fund_data, peer_data):
-    """Generate standalone HTML for printing/PDF export"""
+    """Generate standalone HTML report covering all 8 phases — for download and PDF conversion"""
     
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <title>{ticker} Analysis Report</title>
-        <style>
-            body {{
-                font-family: 'Helvetica Neue', Arial, sans-serif;
-                margin: 40px;
-                color: #1e293b;
-                line-height: 1.6;
-            }}
-            .header {{
-                background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-                color: white;
-                padding: 30px;
-                border-radius: 10px;
-                text-align: center;
-                margin-bottom: 30px;
-            }}
-            .company-info {{
-                background: #f8fafc;
-                padding: 20px;
-                border-left: 5px solid #2563eb;
-                margin: 20px 0;
-                border-radius: 8px;
-            }}
-            .quick-take {{
-                background: #fef3c7;
-                border-left: 5px solid #f59e0b;
-                padding: 20px;
-                margin: 20px 0;
-                border-radius: 8px;
-            }}
-            .quick-take h2 {{
-                color: #78350f;
-                margin-top: 0;
-            }}
-            .summary {{
-                background: #eff6ff;
-                border-left: 5px solid #2563eb;
-                padding: 20px;
-                margin: 20px 0;
-                border-radius: 8px;
-            }}
-            .section {{
-                margin: 30px 0;
-                page-break-inside: avoid;
-            }}
-            h1 {{
-                margin: 0;
-            }}
-            h2 {{
-                color: #1e3a8a;
-                border-bottom: 2px solid #e2e8f0;
-                padding-bottom: 10px;
-                page-break-after: avoid;
-                margin-top: 30px;
-            }}
-            .analysis-box {{
-                background: #f8fafc;
-                padding: 20px;
-                border: 1px solid #cbd5e1;
-                border-radius: 8px;
-                margin: 15px 0;
-                white-space: pre-wrap;
-            }}
-            .metrics {{
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
-                margin: 15px 0;
-            }}
-            .metric {{
-                padding: 10px;
-                background: white;
-                border-radius: 5px;
-            }}
-            .metric strong {{
-                display: block;
-                color: #64748b;
-                font-size: 0.9em;
-                margin-bottom: 5px;
-            }}
-            .metric-value {{
-                font-size: 1.2em;
-                font-weight: 600;
-                color: #1e293b;
-            }}
-            table {{
-                width: 100%;
-                border-collapse: collapse;
-                margin: 15px 0;
-                page-break-inside: avoid;
-            }}
-            th, td {{
-                padding: 12px;
-                text-align: left;
-                border: 1px solid #e2e8f0;
-            }}
-            th {{
-                background: #f1f5f9;
-                font-weight: 600;
-                color: #1e293b;
-            }}
-            tr:nth-child(even) {{
-                background: #f8fafc;
-            }}
-            .footer {{
-                margin-top: 50px;
-                padding-top: 20px;
-                border-top: 2px solid #e2e8f0;
-                text-align: center;
-                color: #64748b;
-                font-size: 0.9em;
-            }}
-            @media print {{
-                body {{ margin: 20px; }}
-                .no-print {{ display: none; }}
-                * {{
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
-                }}
-            }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>📊 Equity Analyst Assistant</h1>
-            <p>AI-Powered Stock Analysis Report</p>
-        </div>
-        
-        <div class="company-info">
-            <h1>{company_name} ({ticker})</h1>
-            <p style="margin: 5px 0; color: #64748b;">{sector}</p>
-            <p style="margin: 5px 0; font-size: 0.9em; color: #64748b;">Analysis generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
-        </div>
-        
-        <div class="quick-take">
-            <h2>📌 Quick Take</h2>
-            <div class="metrics">
-                <div class="metric">
-                    <strong>Price</strong>
-                    <div class="metric-value">${stock_data['current_price']}</div>
-                    <div style="color: {'#059669' if stock_data['price_change_pct_30d'] > 0 else '#dc2626'}; font-size: 0.9em;">
-                        {stock_data['price_change_pct_30d']:+.2f}% (30D)
-                    </div>
-                </div>
-                <div class="metric">
-                    <strong>Market Cap</strong>
-                    <div class="metric-value">{format_market_cap(fund_data['market_cap'])}</div>
-                </div>
-                <div class="metric">
-                    <strong>P/E Ratio</strong>
-                    <div class="metric-value">{fund_data['pe_ratio'] if isinstance(fund_data['pe_ratio'], str) else f"{fund_data['pe_ratio']:.2f}"}</div>
-                </div>
-                <div class="metric">
-                    <strong>Profit Margin</strong>
-                    <div class="metric-value">{fund_data['profit_margin']}</div>
-                </div>
+    def _safe(val, fmt=None):
+        if val is None or val == 'N/A' or val == '':
+            return 'N/A'
+        if fmt and isinstance(val, (int, float)):
+            return fmt.format(val)
+        return str(val)
+    
+    def _section(title, content):
+        if not content or content.startswith('Error') or 'not available' in content.lower():
+            return ''
+        return f"""
+        <div class="section">
+            <h2>{title}</h2>
+            <div class="analysis-box">{content}</div>
+        </div>"""
+    
+    pe_display = _safe(fund_data.get('pe_ratio'), '{:.2f}') if fund_data else 'N/A'
+    
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{ticker} Analysis Report</title>
+    <style>
+        body {{ font-family: 'Helvetica Neue', Arial, sans-serif; margin: 40px; color: #1e293b; line-height: 1.6; }}
+        .header {{ background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); color: white; padding: 30px; border-radius: 10px; text-align: center; margin-bottom: 30px; }}
+        .company-info {{ background: #f8fafc; padding: 20px; border-left: 5px solid #2563eb; margin: 20px 0; border-radius: 8px; }}
+        .quick-take {{ background: #fef3c7; border-left: 5px solid #f59e0b; padding: 20px; margin: 20px 0; border-radius: 8px; }}
+        .quick-take h2 {{ color: #78350f; margin-top: 0; }}
+        .summary {{ background: #eff6ff; border-left: 5px solid #2563eb; padding: 20px; margin: 20px 0; border-radius: 8px; }}
+        .section {{ margin: 30px 0; page-break-inside: avoid; }}
+        h1 {{ margin: 0; }}
+        h2 {{ color: #1e3a8a; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; page-break-after: avoid; margin-top: 30px; }}
+        .analysis-box {{ background: #f8fafc; padding: 20px; border: 1px solid #cbd5e1; border-radius: 8px; margin: 15px 0; white-space: pre-wrap; }}
+        .metrics {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 15px 0; }}
+        .metric {{ padding: 10px; background: white; border-radius: 5px; }}
+        .metric strong {{ display: block; color: #64748b; font-size: 0.9em; margin-bottom: 5px; }}
+        .metric-value {{ font-size: 1.2em; font-weight: 600; color: #1e293b; }}
+        table {{ width: 100%; border-collapse: collapse; margin: 15px 0; page-break-inside: avoid; }}
+        th, td {{ padding: 12px; text-align: left; border: 1px solid #e2e8f0; }}
+        th {{ background: #f1f5f9; font-weight: 600; color: #1e293b; }}
+        tr:nth-child(even) {{ background: #f8fafc; }}
+        .footer {{ margin-top: 50px; padding-top: 20px; border-top: 2px solid #e2e8f0; text-align: center; color: #64748b; font-size: 0.9em; }}
+        @media print {{ body {{ margin: 20px; }} .no-print {{ display: none; }} * {{ -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }} }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Equity Analyst Assistant</h1>
+        <p>AI-Powered Stock Analysis Report</p>
+    </div>
+    
+    <div class="company-info">
+        <h1>{company_name} ({ticker})</h1>
+        <p style="margin: 5px 0; color: #64748b;">{sector}</p>
+        <p style="margin: 5px 0; font-size: 0.9em; color: #64748b;">Analysis generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
+    </div>
+    
+    <div class="quick-take">
+        <h2>Quick Take</h2>
+        <div class="metrics">
+            <div class="metric">
+                <strong>Price</strong>
+                <div class="metric-value">${stock_data['current_price']}</div>
+                <div style="color: {'#059669' if stock_data['price_change_pct_30d'] > 0 else '#dc2626'}; font-size: 0.9em;">{stock_data['price_change_pct_30d']:+.2f}% (30D)</div>
+            </div>
+            <div class="metric">
+                <strong>Market Cap</strong>
+                <div class="metric-value">{format_market_cap(fund_data.get('market_cap', 'N/A')) if fund_data else 'N/A'}</div>
+            </div>
+            <div class="metric">
+                <strong>P/E Ratio</strong>
+                <div class="metric-value">{pe_display}</div>
+            </div>
+            <div class="metric">
+                <strong>Profit Margin</strong>
+                <div class="metric-value">{fund_data.get('profit_margin', 'N/A') if fund_data else 'N/A'}</div>
             </div>
         </div>
-        
-        <div class="summary">
-            <h2>🎯 Investment Summary</h2>
-            <p style="margin: 10px 0; line-height: 1.8;">{analyses['investment_summary']}</p>
+    </div>
+    
+    <div class="summary">
+        <h2>Investment Summary</h2>
+        <div style="margin: 10px 0; line-height: 1.8;">{analyses.get('investment_summary', 'N/A')}</div>
+    </div>
+    
+    {_section('Phase 2: Business Model Deep Dive', analyses.get('business_deep_dive', ''))}
+    {_section('Phase 3: Financial Health Analysis', analyses.get('health_analysis', ''))}
+    {_section('Phase 3: 5-Year Financial Trajectory', analyses.get('financial_trends', ''))}
+    {_section('Phase 4: Forward Estimates & Scenario Analysis', analyses.get('forward_scenarios', ''))}
+    {_section('Phase 5: Relative Valuation', analyses.get('relative_valuation', ''))}
+    {_section('Phase 2: Peer Comparison', analyses.get('peer_analysis', ''))}
+    {_section('Phase 6: Risk Framework', analyses.get('risk_framework', ''))}
+    {_section('Phase 7: Catalyst Timeline', analyses.get('catalyst_timeline', ''))}
+    
+    <div class="section">
+        <h2>Price Trend (30 Days)</h2>
+        <div class="metrics">
+            <div class="metric"><strong>30-Day High</strong><div class="metric-value">${stock_data['high_30d']}</div></div>
+            <div class="metric"><strong>30-Day Low</strong><div class="metric-value">${stock_data['low_30d']}</div></div>
         </div>
-        
-        <div class="section">
-            <h2>📊 Financial Health Analysis</h2>
-            <div class="analysis-box">{analyses['health_analysis']}</div>
-        </div>
-        
-        <div class="section">
-            <h2>🔄 Peer Comparison Analysis</h2>
-            <div class="analysis-box">{analyses['peer_analysis']}</div>
-        </div>
-        
-        <div class="section">
-            <h2>📈 Price Trend Analysis (30 Days)</h2>
-            <div class="metrics">
-                <div class="metric">
-                    <strong>30-Day High</strong>
-                    <div class="metric-value">${stock_data['high_30d']}</div>
-                </div>
-                <div class="metric">
-                    <strong>30-Day Low</strong>
-                    <div class="metric-value">${stock_data['low_30d']}</div>
-                </div>
-            </div>
-            <div class="analysis-box">{analyses['trend_analysis']}</div>
-        </div>
-        
-        <div class="section">
-            <h2>📰 News & Sentiment Analysis</h2>
-            <div class="analysis-box">{analyses['news_analysis']}</div>
-        </div>
-        
-        <div class="footer">
-            <p><strong>Karan Rajpal</strong></p>
-            <p>Model Validation Expert @ Handshake AI | Partnering with OpenAI on LLM Fine-Tuning</p>
-            <p>Former 5th Hire @ Borderless Capital | UC Berkeley Haas MBA '25</p>
-            <p style="margin-top: 10px;"><em>Built with Streamlit, Claude AI (Sonnet 4), and yfinance</em></p>
-        </div>
-    </body>
-    </html>
-    """
+        <div class="analysis-box">{analyses.get('trend_analysis', 'N/A')}</div>
+    </div>
+    
+    {_section('News & Sentiment', analyses.get('news_analysis', ''))}
+    
+    <div style="margin-top: 30px; padding: 15px; background: #fef3c7; border-radius: 8px; font-size: 0.9em;">
+        <strong>Disclaimer:</strong> This AI-generated analysis is for informational purposes only and should not be considered investment advice. 
+        Always conduct your own research and consult with financial professionals before making investment decisions.
+    </div>
+    
+    <div class="footer">
+        <p><strong>Karan Rajpal</strong></p>
+        <p>UC Berkeley Haas MBA '25 | LLM Validation @ Handshake AI</p>
+        <p style="margin-top: 10px;"><em>Built with Claude AI (Sonnet 4), SEC EDGAR, and Financial Modeling Prep</em></p>
+    </div>
+</body>
+</html>"""
     return html
 
 # NOW continue with st.set_page_config...
@@ -554,25 +463,23 @@ if analyze_btn and ticker_input:
             })
             components.html(f"<script>window.top.postMessage({_signal_data}, '*');</script>", height=0)
             
-            # Generate HTML report for download
+            # Generate HTML report for download — all 8 phases
             all_analyses_dict = {
                 'investment_summary': investment_summary,
                 'health_analysis': health_analysis,
                 'peer_analysis': peer_analysis,
                 'trend_analysis': trend_analysis,
-                'news_analysis': news_analysis
+                'news_analysis': news_analysis,
+                'business_deep_dive': deep_dive_result.get('synthesis', '') if deep_dive_result else '',
+                'financial_trends': historical_trend_analysis or '',
+                'forward_scenarios': forward_scenarios or '',
+                'relative_valuation': relative_valuation or '',
+                'risk_framework': risk_framework or '',
+                'catalyst_timeline': catalyst_timeline or '',
             }
             
-            try:
-                import yfinance as yf
-                company = yf.Ticker(ticker_input)
-                company_name_full = company.info.get('longName', ticker_input)
-                sector_full = company.info.get('sector', 'N/A')
-                industry_full = company.info.get('industry', 'N/A')
-                sector_display = f"{sector_full} • {industry_full}"
-            except:
-                company_name_full = ticker_input
-                sector_display = "N/A"
+            company_name_full = fund_data.get('company_name', ticker_input) if fund_data else ticker_input
+            sector_display = f"{fund_data.get('sector', 'N/A')} • {fund_data.get('industry', 'N/A')}" if fund_data else "N/A"
             
             html_report = generate_html_report(
                 ticker=ticker_input,
@@ -584,39 +491,48 @@ if analyze_btn and ticker_input:
                 peer_data=peer_data
             )
             
-            # Download button
-            col1, col2, col3 = st.columns([1, 2, 3])
+            # Download buttons — HTML and PDF
+            col1, col2, col3 = st.columns([1, 1, 2])
             with col1:
                 st.download_button(
-                    label="📄 Download Report",
+                    label="📄 Download HTML",
                     data=html_report,
                     file_name=f"{ticker_input}_Analysis_{datetime.now().strftime('%Y%m%d')}.html",
                     mime="text/html",
-                    type="primary",
-                    help="Download as HTML - open in browser, then Print (Ctrl+P) and Save as PDF"
+                    help="Full report as HTML — open in browser"
                 )
             with col2:
-                st.info("💡 Open the HTML file and use Ctrl+P → Save as PDF")
+                # Generate PDF from HTML
+                try:
+                    from xhtml2pdf import pisa
+                    import io
+                    pdf_buffer = io.BytesIO()
+                    pisa.CreatePDF(html_report, dest=pdf_buffer)
+                    pdf_bytes = pdf_buffer.getvalue()
+                    st.download_button(
+                        label="📕 Download PDF",
+                        data=pdf_bytes,
+                        file_name=f"{ticker_input}_Analysis_{datetime.now().strftime('%Y%m%d')}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                    )
+                except ImportError:
+                    st.info("💡 Install xhtml2pdf for PDF export: pip install xhtml2pdf")
             
             # Timestamp
             analysis_time = datetime.now().strftime("%B %d, %Y at %I:%M %p")
             st.markdown(f'<div class="timestamp">Analysis generated on {analysis_time}</div>', unsafe_allow_html=True)            
-            # Company Header
-            import yfinance as yf
-            try:
-                company = yf.Ticker(ticker_input)
-                company_name = company.info.get('longName', ticker_input)
-                sector = company.info.get('sector', 'N/A')
-                industry = company.info.get('industry', 'N/A')
-                
-                st.markdown(f"""
-                <div class="company-header">
-                    <div class="company-name">{company_name} ({ticker_input})</div>
-                    <div class="company-info">{sector} • {industry}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            except:
-                st.markdown(f"## {ticker_input} Analysis Dashboard")
+            # Company Header — uses FMP profile data already fetched
+            company_name = fund_data.get('company_name', ticker_input) if fund_data else ticker_input
+            sector = fund_data.get('sector', 'N/A') if fund_data else 'N/A'
+            industry = fund_data.get('industry', 'N/A') if fund_data else 'N/A'
+            
+            st.markdown(f"""
+            <div class="company-header">
+                <div class="company-name">{company_name} ({ticker_input})</div>
+                <div class="company-info">{sector} • {industry}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
             # Quick Take Box
             price_change_color = "metric-positive" if stock_data['price_change_pct_30d'] > 0 else "metric-negative"

@@ -204,19 +204,29 @@ def get_fundamental_data_fmp(ticker):
                 return 'N/A'
         
         fundamental_data = {
-            'market_cap': profile.get('mktCap', 'N/A'),
-            'pe_ratio': profile.get('peRatio') or ratios.get('peRatioTTM', 'N/A'),
-            'forward_pe': ratios.get('priceEarningsToGrowthRatioTTM', 'N/A'),
-            'peg_ratio': ratios.get('priceEarningsToGrowthRatioTTM', 'N/A'),
-            'price_to_book': ratios.get('priceToBookRatioTTM', 'N/A'),
-            'price_to_sales': ratios.get('priceToSalesRatioTTM', 'N/A'),
-            'ev_to_ebitda': ratios.get('enterpriseValueOverEBITDATTM', 'N/A'),
+            'market_cap': profile.get('marketCap', 'N/A'),
+            'pe_ratio': ratios.get('priceToEarningsRatioTTM') or 'N/A',
+            'forward_pe': ratios.get('forwardPriceToEarningsGrowthRatioTTM') or 'N/A',
+            'peg_ratio': ratios.get('priceToEarningsGrowthRatioTTM') or 'N/A',
+            'price_to_book': ratios.get('priceToBookRatioTTM') or 'N/A',
+            'price_to_sales': ratios.get('priceToSalesRatioTTM') or 'N/A',
+            'ev_to_ebitda': ratios.get('enterpriseValueMultipleTTM') or 'N/A',
             
             'profit_margin': safe_pct(ratios.get('netProfitMarginTTM')),
             'operating_margin': safe_pct(ratios.get('operatingProfitMarginTTM')),
             'gross_margin': safe_pct(ratios.get('grossProfitMarginTTM')),
-            'roe': safe_pct(ratios.get('returnOnEquityTTM')),
-            'roa': safe_pct(ratios.get('returnOnAssetsTTM')),
+            'roe': safe_pct(
+                # ROE not directly in stable TTM — compute via DuPont
+                (ratios.get('netProfitMarginTTM') or 0) * 
+                (ratios.get('assetTurnoverTTM') or 0) * 
+                (ratios.get('financialLeverageRatioTTM') or 0)
+                if ratios.get('netProfitMarginTTM') else None
+            ),
+            'roa': safe_pct(
+                (ratios.get('netProfitMarginTTM') or 0) * 
+                (ratios.get('assetTurnoverTTM') or 0)
+                if ratios.get('netProfitMarginTTM') else None
+            ),
             
             'revenue_growth_yoy': safe_pct(growth.get('revenueGrowth')),
             'earnings_growth_yoy': safe_pct(growth.get('epsgrowth')),
@@ -225,6 +235,11 @@ def get_fundamental_data_fmp(ticker):
             'dividend_yield': safe_pct(ratios.get('dividendYieldTTM')),
             '52_week_high': profile.get('range', 'N/A').split('-')[-1].strip() if profile.get('range') else 'N/A',
             '52_week_low': profile.get('range', 'N/A').split('-')[0].strip() if profile.get('range') else 'N/A',
+            
+            # Extra fields for display
+            'company_name': profile.get('companyName', ticker),
+            'sector': profile.get('sector', 'N/A'),
+            'industry': profile.get('industry', 'N/A'),
         }
         
         # Clean up None values
