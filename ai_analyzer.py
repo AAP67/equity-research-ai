@@ -257,20 +257,22 @@ Be specific with percentages. Flag anything above 40% concentration as a risk.""
         return f"Error: {str(e)}"
 
 
-def extract_management_signals(ticker, transcript_data):
+def extract_management_signals(ticker, transcript_data, mda_text=None):
     """
     Stage 1, Call 3: Extract management signals from earnings call transcripts.
+    Falls back to MD&A from 10-K if transcripts are unavailable.
     """
-    if not transcript_data:
+    if not transcript_data and not mda_text:
         return "Earnings call transcripts not available."
     
-    # Combine transcripts
-    transcript_text = ""
-    for t in transcript_data[:2]:
-        transcript_text += f"\n--- {t['quarter']} {t['year']} EARNINGS CALL ---\n"
-        transcript_text += t['content'][:10000]  # Cap per transcript for token limits
-    
-    prompt = f"""You are an equity research analyst reading {ticker}'s recent earnings call transcripts. Extract the key signals:
+    # Primary: use earnings call transcripts
+    if transcript_data:
+        transcript_text = ""
+        for t in transcript_data[:2]:
+            transcript_text += f"\n--- {t['quarter']} {t['year']} EARNINGS CALL ---\n"
+            transcript_text += t['content'][:10000]
+        
+        prompt = f"""You are an equity research analyst reading {ticker}'s recent earnings call transcripts. Extract the key signals:
 
 {transcript_text[:18000]}
 
@@ -283,6 +285,24 @@ Produce a structured analysis (300 words max):
 5. **Tone shift**: Compared to prior quarter (if available), is management more or less confident?
 
 Ground every observation in what was actually said. Do not infer beyond the text."""
+
+    # Fallback: use MD&A from 10-K
+    else:
+        prompt = f"""You are an equity research analyst reading {ticker}'s Management Discussion & Analysis (MD&A) from their most recent 10-K filing. Extract management signals:
+
+{mda_text[:15000]}
+
+Produce a structured analysis (300 words max):
+
+1. **Management's narrative**: What 2-3 themes is management emphasizing about the business and its direction?
+2. **Forward-looking signals**: What does management say about future growth drivers, investments, or strategic priorities?
+3. **Risk acknowledgments**: What risks or challenges does management explicitly call out?
+4. **Tone and confidence**: Does management sound cautious or aggressive about the outlook?
+5. **Key metrics highlighted**: What financial metrics or operational KPIs does management focus on?
+
+Note: This analysis is based on the annual 10-K filing (MD&A section), not a quarterly earnings call. The tone may be more formal and backward-looking than a live call.
+
+Ground every observation in what was actually stated. Do not infer beyond the text."""
 
     try:
         message = client.messages.create(
@@ -416,7 +436,10 @@ def run_business_deep_dive(ticker, sec_sections, segmentation_data, transcript_d
     revenue_quality = extract_revenue_quality(ticker, segmentation_data)
     print(f"    ✓ Revenue quality assessed")
     
-    management_signals = extract_management_signals(ticker, transcript_data)
+    management_signals = extract_management_signals(
+        ticker, transcript_data,
+        mda_text=sec_sections.get('mda', '')
+    )
     print(f"    ✓ Management signals extracted")
     
     moat_signals = extract_moat_signals(
@@ -433,10 +456,11 @@ def run_business_deep_dive(ticker, sec_sections, segmentation_data, transcript_d
     }
     
     # Track which data sources succeeded — for UI transparency
+    mgmt_source = 'Earnings Transcripts' if transcript_data else 'MD&A (10-K fallback)'
     data_sources = {
         '10-K Filing': _is_valid(business_model) or _is_valid(moat_signals),
         'Revenue Segmentation': _is_valid(revenue_quality),
-        'Earnings Transcripts': _is_valid(management_signals),
+        mgmt_source: _is_valid(management_signals),
     }
     
     # Stage 2: Synthesis (skipped if all inputs failed)
