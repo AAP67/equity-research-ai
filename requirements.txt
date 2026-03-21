@@ -8,4 +8,3 @@ yfinance
 sec-edgar-downloader
 beautifulsoup4
 lxml
-xhtml2pdf

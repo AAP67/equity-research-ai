@@ -502,22 +502,15 @@ if analyze_btn and ticker_input:
                     help="Full report as HTML — open in browser"
                 )
             with col2:
-                # Generate PDF from HTML
-                try:
-                    from xhtml2pdf import pisa
-                    import io
-                    pdf_buffer = io.BytesIO()
-                    pisa.CreatePDF(html_report, dest=pdf_buffer)
-                    pdf_bytes = pdf_buffer.getvalue()
-                    st.download_button(
-                        label="📕 Download PDF",
-                        data=pdf_bytes,
-                        file_name=f"{ticker_input}_Analysis_{datetime.now().strftime('%Y%m%d')}.pdf",
-                        mime="application/pdf",
-                        type="primary",
-                    )
-                except ImportError:
-                    st.info("💡 Install xhtml2pdf for PDF export: pip install xhtml2pdf")
+                st.download_button(
+                    label="📕 Save as PDF",
+                    data=html_report,
+                    file_name=f"{ticker_input}_Analysis_{datetime.now().strftime('%Y%m%d')}.html",
+                    mime="text/html",
+                    type="primary",
+                    help="Open in browser → Ctrl+P → Save as PDF"
+                )
+                st.caption("Open → Ctrl+P → Save as PDF")
             
             # Timestamp
             analysis_time = datetime.now().strftime("%B %d, %Y at %I:%M %p")
