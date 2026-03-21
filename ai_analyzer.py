@@ -141,33 +141,69 @@ Be concise and specific."""
 
 def generate_investment_summary(ticker, all_analyses):
     """
-    Generate comprehensive investment summary
+    Phase 8: Final synthesis — structured research note pulling from all phases.
     """
-    prompt = f"""Synthesize an investment summary for {ticker} based on:
+    prompt = f"""You are a senior equity research analyst writing the Executive Summary for a research report on {ticker}. 
+This goes at the top of the report — it's the first thing the portfolio manager reads.
+
+Below are the outputs from your team's analysis across 7 research modules. Synthesize everything into a single, decisive research note.
+
+BUSINESS MODEL (Phase 2):
+{all_analyses.get('business_deep_dive', 'Not available')[:1500]}
+
+FINANCIAL TRENDS (Phase 3):
+{all_analyses.get('financial_trends', 'Not available')[:1000]}
+
+FORWARD ESTIMATES (Phase 4):
+{all_analyses.get('forward_scenarios', 'Not available')[:1000]}
+
+VALUATION (Phase 5):
+{all_analyses.get('relative_valuation', 'Not available')[:1000]}
+
+RISK FRAMEWORK (Phase 6):
+{all_analyses.get('risk_framework', 'Not available')[:1000]}
+
+CATALYST TIMELINE (Phase 7):
+{all_analyses.get('catalyst_timeline', 'Not available')[:800]}
 
 FINANCIAL HEALTH:
-{all_analyses.get('financial_health', '')}
+{all_analyses.get('financial_health', '')[:500]}
 
 PEER COMPARISON:
-{all_analyses.get('peer_comparison', '')}
-
-PRICE TREND:
-{all_analyses.get('price_trend', '')}
+{all_analyses.get('peer_comparison', '')[:500]}
 
 NEWS SENTIMENT:
-{all_analyses.get('news_sentiment', '')}
+{all_analyses.get('news_sentiment', '')[:500]}
 
-Provide a 4-5 sentence investment summary:
-- Overall assessment (buy/hold/avoid territory?)
-- Key strengths and risks
-- What type of investor would this suit?
+Produce the Executive Summary (500 words max) with this exact structure:
 
-Write like you're advising a friend."""
+## Rating: [BUY / HOLD / SELL] — [One-line thesis in 15 words or less]
+
+**Target Price**: $[base case target] (Bull: $[bull] / Bear: $[bear])
+**Current Price**: Reference from the data
+**Expected Return**: [X]% to base case target
+
+## Investment Thesis
+3-4 sentences. Why own (or avoid) this stock? What's the core insight that the market may be mispricing?
+
+## Key Strengths
+Top 3 reasons to own, one sentence each. Each must reference specific data.
+
+## Key Risks
+Top 3 risks, one sentence each. Reference the risk framework analysis.
+
+## Catalysts to Watch
+The 2-3 most important upcoming events that could prove or disprove the thesis.
+
+## Investor Fit
+One sentence: Growth / Value / Income / Speculative — and why.
+
+Write with conviction. A PM should read this and know whether to put the name on the buy list or pass. No hedging with "it depends" — take a stance."""
 
     try:
         message = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=800,
+            max_tokens=1500,
             messages=[{"role": "user", "content": prompt}]
         )
         return message.content[0].text

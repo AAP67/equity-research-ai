@@ -519,12 +519,18 @@ if analyze_btn and ticker_input:
             
             progress.info("🧠 Step 11/11: Generating investment summary...")
             
-            # Generate summary
+            # Generate summary — feed ALL phase outputs
             all_analyses = {
                 'financial_health': health_analysis,
                 'peer_comparison': peer_analysis,
                 'price_trend': trend_analysis,
-                'news_sentiment': news_analysis
+                'news_sentiment': news_analysis,
+                'business_deep_dive': deep_dive_result.get('synthesis', '') if deep_dive_result else '',
+                'financial_trends': historical_trend_analysis or '',
+                'forward_scenarios': forward_scenarios or '',
+                'relative_valuation': relative_valuation or '',
+                'risk_framework': risk_framework or '',
+                'catalyst_timeline': catalyst_timeline or '',
             }
             investment_summary = generate_investment_summary(ticker_input, all_analyses)
             
