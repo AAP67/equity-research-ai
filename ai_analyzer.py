@@ -785,6 +785,88 @@ Ground every risk in specific evidence from the data provided. No generic risks 
         return f"Error: {str(e)}"
 
 
+# ============================================================
+# PHASE 7: CATALYST TIMELINE
+# ============================================================
+
+def analyze_catalyst_timeline(ticker, catalyst_events, news_articles, forward_scenarios_text, risk_framework_text):
+    """
+    Build a forward-looking catalyst map for the next 6-12 months.
+    Combines earnings dates, dividends, news signals, and scenario triggers.
+    One Claude call.
+    """
+    context = ""
+    
+    # Earnings events
+    if catalyst_events and catalyst_events.get('earnings'):
+        context += "EARNINGS HISTORY & UPCOMING:\n"
+        for e in catalyst_events['earnings'][:6]:
+            actual = f"  Actual EPS: ${e['eps_actual']}" if e.get('eps_actual') else "  (upcoming)"
+            est = f"  Est EPS: ${e['eps_estimated']}" if e.get('eps_estimated') else ""
+            beat = ""
+            if e.get('eps_actual') and e.get('eps_estimated') and e['eps_estimated']:
+                surprise = ((e['eps_actual'] - e['eps_estimated']) / abs(e['eps_estimated'])) * 100
+                beat = f"  Surprise: {surprise:+.1f}%"
+            context += f"  {e['date']}{actual}{est}{beat}\n"
+        context += "\n"
+    
+    # Dividends
+    if catalyst_events and catalyst_events.get('dividends'):
+        context += "RECENT DIVIDENDS:\n"
+        for d in catalyst_events['dividends'][:4]:
+            context += f"  {d['date']}: ${d['dividend']} ({d['frequency']}), Payment: {d['payment_date']}\n"
+        context += "\n"
+    
+    # News themes
+    if news_articles:
+        context += "RECENT NEWS HEADLINES:\n"
+        for i, article in enumerate(news_articles[:5], 1):
+            context += f"  {i}. {article.get('title', '')} ({article.get('source', '')})\n"
+        context += "\n"
+    
+    # Forward scenario context
+    if forward_scenarios_text and not any(m in forward_scenarios_text for m in ["not available", "Error:"]):
+        context += f"SCENARIO ANALYSIS CONTEXT:\n{forward_scenarios_text[:1500]}\n\n"
+    
+    # Risk context
+    if risk_framework_text and not any(m in risk_framework_text for m in ["not available", "Error:", "Insufficient"]):
+        context += f"KEY RISKS:\n{risk_framework_text[:1500]}\n\n"
+    
+    if not context.strip():
+        return "Insufficient data to build catalyst timeline."
+    
+    prompt = f"""You are an equity research analyst building the Catalyst Timeline for {ticker}.
+
+{context}
+
+Produce a catalyst map (300 words max) with these sections:
+
+## Upcoming Catalysts (Next 6 Months)
+List 3-5 specific events or dates that could move the stock. For each:
+- **Date/Timeframe**: When (be specific — quarter or month)
+- **Event**: What is it
+- **Direction**: Potential positive catalyst (+), negative catalyst (−), or informational (→)
+- **Why it matters**: One sentence on thesis impact
+
+## Earnings Track Record
+Based on the earnings history, does management typically beat, meet, or miss estimates? What's the pattern? Is the beat magnitude shrinking (expectations catching up)?
+
+## What Would Change the Thesis
+In one sentence each: What specific event would make you upgrade from Hold to Buy? What would make you downgrade to Sell?
+
+Be specific and actionable. An investor should read this and know exactly what to watch for."""
+
+    try:
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1200,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
 if __name__ == "__main__":
     from data_fetchers import (
         get_stock_data, 

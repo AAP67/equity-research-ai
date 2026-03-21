@@ -761,6 +761,63 @@ def compute_valuation_context(historical_data):
 
 
 # ============================================================
+# PHASE 7: CATALYST EVENTS
+# ============================================================
+
+def get_catalyst_events(ticker):
+    """
+    Fetch upcoming/recent catalyst events: earnings dates, dividends.
+    Returns: dict with 'earnings' and 'dividends' keys.
+    """
+    if not FMP_API_KEY:
+        return None
+    
+    result = {'earnings': [], 'dividends': []}
+    
+    # Earnings calendar — returns all stocks, filter to our ticker
+    try:
+        url = f"https://financialmodelingprep.com/stable/earnings-calendar?symbol={ticker}&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        
+        if data and isinstance(data, list):
+            for entry in data:
+                if entry.get('symbol', '').upper() == ticker.upper():
+                    result['earnings'].append({
+                        'date': entry.get('date', ''),
+                        'eps_estimated': entry.get('epsEstimated'),
+                        'eps_actual': entry.get('epsActual'),
+                        'revenue_estimated': entry.get('revenueEstimated'),
+                        'revenue_actual': entry.get('revenueActual'),
+                    })
+            # Sort by date, most recent first
+            result['earnings'].sort(key=lambda x: x['date'], reverse=True)
+            print(f"[FMP] Earnings events fetched for {ticker}: {len(result['earnings'])} events")
+    except Exception as e:
+        print(f"[FMP] Error fetching earnings calendar for {ticker}: {e}")
+    
+    # Dividends
+    try:
+        url = f"https://financialmodelingprep.com/stable/dividends?symbol={ticker}&apikey={FMP_API_KEY}"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        
+        if data and isinstance(data, list):
+            for entry in data[:4]:  # Last 4 dividends
+                result['dividends'].append({
+                    'date': entry.get('date', ''),
+                    'payment_date': entry.get('paymentDate', ''),
+                    'dividend': entry.get('dividend', 0),
+                    'frequency': entry.get('frequency', ''),
+                })
+            print(f"[FMP] Dividend events fetched for {ticker}: {len(result['dividends'])} events")
+    except Exception as e:
+        print(f"[FMP] Error fetching dividends for {ticker}: {e}")
+    
+    return result if (result['earnings'] or result['dividends']) else None
+
+
+# ============================================================
 # HELPERS
 # ============================================================
 
