@@ -9,3 +9,4 @@ sec-edgar-downloader
 beautifulsoup4
 lxml
 fpdf2
+firebase-admin

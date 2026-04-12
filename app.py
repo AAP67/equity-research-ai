@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 from datetime import datetime
+from firebase_utils import init_firebase, check_can_analyze, use_one_report, add_credits
 from data_fetchers import (
     get_stock_data,
     get_fundamental_data,
@@ -311,6 +312,72 @@ st.markdown("""
 
 st.info("💡 **Built for analysts**: Get financials, peer comparisons, price trends, and AI-powered insights in one dashboard")
 
+# ============================================================
+# USER LOGIN & CREDIT SYSTEM
+# ============================================================
+
+# Initialize Firebase
+db = init_firebase()
+
+# Capture credit param from Stripe redirect before it gets cleared
+query_params = st.query_params
+credit_param = query_params.get("credits", None)
+if credit_param:
+    st.session_state["pending_credits"] = credit_param
+
+# Email login
+if "user_email" not in st.session_state:
+    st.session_state["user_email"] = None
+
+if not st.session_state["user_email"]:
+    st.markdown("### 🔐 Sign in to get started")
+    st.markdown("Enter your email to access **3 free reports per month**.")
+    if "pending_credits" in st.session_state:
+        st.info("💳 Credits are waiting! Sign in to apply them to your account.")
+    login_email = st.text_input("Email address", placeholder="you@example.com", key="login_email")
+    login_btn = st.button("Continue", type="primary")
+    if login_btn and login_email and "@" in login_email:
+        st.session_state["user_email"] = login_email.strip().lower()
+        st.rerun()
+    elif login_btn:
+        st.warning("Please enter a valid email address.")
+    st.stop()
+
+# User is logged in — apply pending credits from Stripe redirect
+email = st.session_state["user_email"]
+
+if "pending_credits" in st.session_state:
+    try:
+        credits_to_add = int(st.session_state["pending_credits"])
+        if credits_to_add in [1, 2, 5]:
+            new_total = add_credits(db, email, credits_to_add)
+            st.success(f"✅ {credits_to_add} report credit(s) added! You now have {new_total} credits.")
+    except (ValueError, TypeError):
+        pass
+    del st.session_state["pending_credits"]
+    st.query_params.clear()
+
+usage = check_can_analyze(db, email)
+
+# Status bar
+status_col1, status_col2, status_col3 = st.columns([3, 2, 1])
+with status_col1:
+    st.markdown(f"👤 **{email}**")
+with status_col2:
+    if usage["free_left"] > 0:
+        st.markdown(f"🎁 **{usage['free_left']}** free report(s) left this month")
+    elif usage["credits"] > 0:
+        st.markdown(f"💳 **{usage['credits']}** paid credit(s) remaining")
+    else:
+        st.markdown("⚠️ **No reports remaining**")
+with status_col3:
+    if st.button("Logout", key="logout_btn"):
+        st.session_state["user_email"] = None
+        st.session_state.pop("credit_applied", None)
+        st.rerun()
+
+st.divider()
+
 # Input Section
 col1, col2, col3 = st.columns([2, 2, 1])
 
@@ -337,6 +404,64 @@ st.divider()
 
 # Main Analysis
 if analyze_btn and ticker_input:
+    
+    # --- PAYWALL CHECK ---
+    usage = check_can_analyze(db, email)
+    
+    if not usage["allowed"]:
+        st.warning("🔒 You've used all 3 free reports this month.")
+        st.markdown("### Purchase Report Credits")
+        st.markdown("Unlock more AI-powered equity research reports:")
+        
+        pcol1, pcol2, pcol3 = st.columns(3)
+        with pcol1:
+            st.markdown("""
+            <div style="background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #1e293b;">$20</div>
+                <div style="color: #64748b; margin: 8px 0;">1 Report</div>
+                <div style="color: #94a3b8; font-size: 0.85rem;">$20 per report</div>
+                <a href="https://buy.stripe.com/test_9B6dRae7K4RbeAA4KIdMI00" target="_blank"
+                   style="display: inline-block; margin-top: 16px; padding: 10px 24px; background: #2563eb; color: white; 
+                          border-radius: 8px; text-decoration: none; font-weight: 600;">Buy Now</a>
+            </div>
+            """, unsafe_allow_html=True)
+        with pcol2:
+            st.markdown("""
+            <div style="background: #eff6ff; border: 2px solid #2563eb; border-radius: 12px; padding: 24px; text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 600; color: #2563eb; margin-bottom: 4px;">POPULAR</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #1e293b;">$30</div>
+                <div style="color: #64748b; margin: 8px 0;">2 Reports</div>
+                <div style="color: #94a3b8; font-size: 0.85rem;">$15 per report</div>
+                <a href="https://buy.stripe.com/test_4gMcN6gfS6Zj9gg2CAdMI01" target="_blank"
+                   style="display: inline-block; margin-top: 16px; padding: 10px 24px; background: #2563eb; color: white; 
+                          border-radius: 8px; text-decoration: none; font-weight: 600;">Buy Now</a>
+            </div>
+            """, unsafe_allow_html=True)
+        with pcol3:
+            st.markdown("""
+            <div style="background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center;">
+                <div style="font-size: 0.75rem; font-weight: 600; color: #059669; margin-bottom: 4px;">BEST VALUE</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #1e293b;">$50</div>
+                <div style="color: #64748b; margin: 8px 0;">5 Reports</div>
+                <div style="color: #94a3b8; font-size: 0.85rem;">$10 per report</div>
+                <a href="https://buy.stripe.com/test_dRm3cwfbO97r2RSfpmdMI02" target="_blank"
+                   style="display: inline-block; margin-top: 16px; padding: 10px 24px; background: #2563eb; color: white; 
+                          border-radius: 8px; text-decoration: none; font-weight: 600;">Buy Now</a>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("*After payment, you'll be redirected back here and your credits will be added automatically.*")
+        st.stop()
+    
+    # --- DEDUCT USAGE ---
+    use_one_report(db, email, usage["reason"])
+    if usage["reason"] == "free":
+        remaining = usage["free_left"] - 1
+        st.toast(f"🎁 Free report used. {remaining} free report(s) left this month.")
+    else:
+        remaining = usage["credits"] - 1
+        st.toast(f"💳 Credit used. {remaining} credit(s) remaining.")
     
     # Parse peers
     peers = [p.strip().upper() for p in peers_input.split(",")] if peers_input else []

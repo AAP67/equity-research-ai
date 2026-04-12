@@ -61,3 +61,4 @@ sec-edgar-filings/
    - Real-time data via yfinance
    - Peer comparison with Claude AI insights
    - Professional UI optimized for analysts
+.streamlit/secrets.toml
