@@ -313,6 +313,23 @@ st.markdown("""
 st.info("💡 **Built for analysts**: Get financials, peer comparisons, price trends, and AI-powered insights in one dashboard")
 
 # ============================================================
+# DEMO VIDEO
+# ============================================================
+with st.expander("🎬 **Watch the demo** — see a full analysis in 2 minutes", expanded=False):
+    components.html(
+        """
+        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:8px;">
+            <iframe src="https://share.descript.com/embed/2f7qGaMOWik"
+                    width="100%" height="100%"
+                    style="position:absolute;top:0;left:0;border:none;"
+                    allowfullscreen>
+            </iframe>
+        </div>
+        """,
+        height=450,
+    )
+
+# ============================================================
 # USER LOGIN & CREDIT SYSTEM
 # ============================================================
 
